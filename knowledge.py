@@ -55,7 +55,7 @@ def validate_module(item):
             "examples": strings(item.get("examples", []), "课程例子", 5, 1500),
             "pitfalls": strings(item.get("pitfalls", []), "易错点", 8, 500),
             "questions": [{"question": txt(q.get("question"), "复习问题", 500), "answer": txt(q.get("answer"), "参考答案", 1500)} for q in questions if isinstance(q, dict)],
-            "evidence": strings(item.get("evidence", []), "依据摘录", 3, 600)}
+            "evidence": strings(item.get("evidence", []), "依据摘录", 8, 600)}
 
 
 def validate_knowledge(value):
@@ -135,6 +135,8 @@ def review_modules(generator, draft, material, material_kind):
               "仅存在资料支撑时修订，不新增虚构内容。保留未能确认的问题。"
               '返回 {"summary":"审核范围和结果说明","issues":[{"moduleId":"m1 或空字符串","severity":"warning 或 error","kind":"evidence/contradiction/omission/uncertainty/structure","problem":"具体问题","suggestion":"如何核对"}],'
               '"corrections":[{"issueIndex":0,"moduleId":"m1","field":"notes/concepts/examples/pitfalls/questions/evidence","value":"该字段完整修订后的值，类型须与原字段一致","reason":"修订理由"}]}。'
+              "本批最多列6个实质问题、4处必要修订，summary不超过350字。仅修改确有问题的字段，避免为了润色重写整段正文。"
+              "结合courseOutline检查模块关系；其他模块未提供正文时，不推断其内容正确或有误。"
               "没有问题时返回空 issues 和 corrections。不能仅因格式完整就声称所有事实正确。资料：\n" + json.dumps({"materialKind": material_kind, "material": material, "draft": draft}, ensure_ascii=False))
     result = parse_json(generator(prompt))
     raw_issues = result.get("issues", [])
