@@ -177,24 +177,41 @@ def build_knowledge(store, integrations, vid, progress, prepared=None, review_on
         raise IntegrationError("视频已移除")
     source, source_kind = material_for(original)
     fingerprint = material_hash(original)
+    checkpoint_name = "knowledge-job-" + hashlib.sha256(vid.encode()).hexdigest()[:24]
+    checkpoint = integrations.read(checkpoint_name)
+    mode = "review" if review_only else "build"
+    if checkpoint.get("fingerprint") != fingerprint or checkpoint.get("mode") != mode or checkpoint.get("version") != 2:
+        checkpoint = {"version": 2, "fingerprint": fingerprint, "mode": mode}
+    def save_checkpoint():
+        integrations.write(checkpoint_name, checkpoint)
     if not integrations.lock.acquire(blocking=False):
         raise IntegrationError("其他 AI 任务正在进行，稍后重新构建模块")
     try:
         generator = integrations.deepseek_generate if integrations.read("ai").get("mode", "harness") == "deepseek" else integrations.harness_generate
-        material = prepared if prepared is not None else prepare_material(source, generator, lambda i, n: progress("知识模块：整理资料第 %d/%d 段" % (i, n)))
+        material = checkpoint.get("material") or (prepared if prepared is not None else prepare_material(source, generator, lambda i, n: progress("知识模块：整理资料第 %d/%d 段" % (i, n))))
+        checkpoint["material"] = material
+        save_checkpoint()
         kind = source_kind + ("的分段摘录" if len(source) > 80000 else "")
-        if review_only:
+        if checkpoint.get("draft"):
+            draft = checkpoint["draft"]
+            draft["modules"] = [validate_module(m) for m in draft["modules"]]
+            progress("已恢复已完成的详尽模块，继续自查")
+        elif review_only:
             if not original.get("knowledge"):
                 raise IntegrationError("先构建知识模块，才能再次自查")
             draft = copy.deepcopy(original["knowledge"])
         else:
             progress("AI 正在规划知识模块与脑图结构")
-            plan = parse_json(generator(RULES + '\n请把课程规划成 3 至 6 个有先后关系的知识模块。返回 {"title":"中文知识主题","overview":"学习脉络和覆盖范围","modules":[{"title":"模块名称","objective":"学习目标","prerequisites":["前置知识"]}]}。不重复拆分概念，不补写资料未讲的章节。资料：\n' + json.dumps({"title": original.get("aiTitle") or original["title"], "materialKind": kind, "material": material}, ensure_ascii=False)))
+            plan = checkpoint.get("plan") or parse_json(generator(RULES + '\n请把课程规划成 3 至 6 个有先后关系的知识模块。返回 {"title":"中文知识主题","overview":"学习脉络和覆盖范围","modules":[{"title":"模块名称","objective":"学习目标","prerequisites":["前置知识"]}]}。不重复拆分概念，不补写资料未讲的章节。资料：\n' + json.dumps({"title": original.get("aiTitle") or original["title"], "materialKind": kind, "material": material}, ensure_ascii=False)))
             outlines = plan.get("modules")
             if not isinstance(outlines, list) or not 1 <= len(outlines) <= 6:
                 raise IntegrationError("知识模块数量无效，请重新生成")
-            modules = []
+            checkpoint["plan"] = plan
+            modules = [validate_module(m) for m in checkpoint.get("modules", [])]
+            save_checkpoint()
             for index, outline in enumerate(outlines, 1):
+                if index <= len(modules):
+                    continue
                 if not isinstance(outline, dict):
                     raise IntegrationError("模块规划格式不正确")
                 meta = {"id": "m" + str(index), "title": txt(outline.get("title"), "模块标题", 120),
@@ -209,10 +226,31 @@ def build_knowledge(store, integrations, vid, progress, prepared=None, review_on
                           "资料：\n" + json.dumps({"module": meta, "courseOutline": outlines, "materialKind": kind, "material": material}, ensure_ascii=False))
                 answer = parse_json(generator(prompt))
                 modules.append(validate_module(dict(answer, **meta)))
+                checkpoint["modules"] = modules
+                save_checkpoint()
             draft = {"version": 1, "title": txt(plan.get("title"), "知识主题", 300), "overview": txt(plan.get("overview"), "学习脉络", 2000), "modules": modules,
                      "generatedAt": datetime.now(timezone.utc).isoformat()}
-        progress("AI 正在第二轮自查：核对依据、概念遗漏与矛盾，并执行可确认的修订")
-        modules, review = review_modules(generator, draft, material, kind)
+        checkpoint["draft"] = draft
+        save_checkpoint()
+        # 两模块一批，对照完整资料和全课程脉络，避免一次审核全部正文超时。
+        reports = checkpoint.get("reports", [])
+        groups = [draft["modules"][i:i+2] for i in range(0, len(draft["modules"]), 2)]
+        course_outline = [{k: m[k] for k in ("id", "title", "objective", "prerequisites")} for m in draft["modules"]]
+        for index, group in enumerate(groups):
+            if index < len(reports):
+                continue
+            progress("AI 第二轮自查：第 %d/%d 批，核对依据、遗漏与矛盾" % (index+1, len(groups)))
+            revised, report = review_modules(generator, {"title": draft["title"], "overview": draft["overview"], "courseOutline": course_outline, "modules": group}, material, kind)
+            draft["modules"][index*2:index*2+len(group)] = revised
+            reports.append(report)
+            checkpoint.update(draft=draft, reports=reports)
+            save_checkpoint()
+        issues = [issue for report in reports for issue in report["issues"]]
+        review = {"status": "needs_review" if any(not i["resolved"] for i in issues) else "reviewed",
+                  "summary": "\n\n".join("第 %d 批：%s" % (i+1, r["summary"]) for i, r in enumerate(reports)),
+                  "issues": issues, "corrections": [c for r in reports for c in r["corrections"]],
+                  "checkedAt": datetime.now(timezone.utc).isoformat()}
+        modules = draft["modules"]
         draft.update(modules=modules, review=review, materialKind=kind, materialHash=fingerprint,
                      model=integrations.status().get("ai", {}).get("model", "") if integrations.read("ai").get("mode") == "deepseek" else integrations.read("harness").get("model", {}).get("model", "Harness"))
         knowledge = validate_knowledge(draft)
@@ -228,4 +266,5 @@ def build_knowledge(store, integrations, vid, progress, prepared=None, review_on
         target["automation"] = {"status": "ready", "message": "详尽笔记、脑图与自查报告已保存" + ("；%d 个问题待你核对" % pending if pending else "；AI 自查完成，仍请结合原课核对"), "model": knowledge["model"]}
         target["updatedAt"] = datetime.now(timezone.utc).isoformat()
         store.save(data)
+    integrations.write(checkpoint_name, {})
     return knowledge
