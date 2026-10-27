@@ -13,6 +13,7 @@ class FakeAI:
     def __init__(self):
         self.lock = threading.Lock()
         self.calls = 0
+        self.prompts = []
         self.captions = True
         self.before_reply = lambda: None
     def read(self, name):
@@ -24,8 +25,9 @@ class FakeAI:
     def harness_generate(self, prompt):
         self.calls += 1
         self.prompt = prompt
+        self.prompts.append(prompt)
         self.before_reply()
-        return {"model":"test", "content":json.dumps({"categoryId":"network", "categoryName":"", "tags":["网络基础"], "summary":"IP 用于寻址；ICMP 协助诊断。[S1]"})}
+        return {"model":"test", "content":json.dumps({"aiTitle":"网络协议入门", "categoryId":"network", "categoryName":"", "tags":["网络基础"], "summary":"IP 用于寻址；ICMP 协助诊断。[S1]"})}
 
 class ImportTests(unittest.TestCase):
     def setUp(self):
@@ -50,6 +52,7 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(v["url"],"https://www.youtube.com/watch?v=abcdefghijk")
         self.assertEqual(v["categoryId"],"network")
         self.assertEqual(v["title"],"协议入门测试")
+        self.assertEqual(v["aiTitle"],"网络协议入门")
         self.assertIn("[S1]",v["summary"])
         self.assertEqual(v["automation"]["status"],"ready")
         self.assertEqual(LibraryStore(self.store.path).read(),self.store.read())
@@ -78,6 +81,7 @@ class ImportTests(unittest.TestCase):
         v,_=self.submit()
         self.assertEqual(v["summary"],"我正在写的个人笔记")
         self.assertTrue(v["favorite"])
+        self.assertIn("AI 新整理",v["notes"][-1]["text"])
     def test_untrusted_urls_rejected_before_network(self):
         for url in ["http://localhost:3080/","https://youtube.com.evil.test/watch?v=abcdefghijk","https://user@youtube.com/watch?v=abcdefghijk"]:
             with self.assertRaises(IntegrationError):youtube_url(url)
@@ -87,3 +91,13 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(v["automation"]["status"],"failed")
         self.assertEqual(v["summary"],"")
         self.assertEqual(self.ai.calls,0)
+
+    def test_long_video_covers_tail_and_replaces_old_summary_with_history(self):
+        self.ai.transcript = lambda url: {"transcript":"分层网络课程。" * 14000 + "尾部独有概念：负载均衡适用条件"}
+        v,_ = self.submit()
+        self.assertEqual(self.ai.calls,3)
+        self.assertTrue(any("尾部独有概念" in prompt for prompt in self.ai.prompts))
+        self.assertIn("全部字幕已分段",v["summary"])
+        self.importer.submit(v["url"],retry=True)
+        self.importer.queue.join()
+        self.assertEqual(self.store.read()["videos"][0]["summary"],v["summary"])
