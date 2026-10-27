@@ -20,16 +20,19 @@ def module(mid='m1'):
 
 class FakeKnowledgeAI:
     def __init__(self):
-        self.lock=threading.Lock();self.calls=[];self.before_review=lambda:None
+        self.lock=threading.Lock();self.calls=[];self.state={};self.before_review=lambda:None;self.module_count=2
         self.review={"summary":"已检查本次资料中的概念、例子和引用。","issues":[],"corrections":[]}
     def read(self,name):
-        return {"model":{"model":"test-model"}} if name=='harness' else {}
+        return {"model":{"model":"test-model"}} if name=='harness' else copy.deepcopy(self.state.get(name, {}))
+    def write(self,name,data):
+        self.state[name]=copy.deepcopy(data)
     def harness_generate(self,prompt):
         self.calls.append(prompt)
         if '独立的第二轮自查' in prompt:
             self.before_review();answer=self.review
         elif '请把课程规划' in prompt:
             answer={"title":"网络地址知识模块","overview":"先理解地址，再理解自动分配。","modules":[{"title":"IP 与 DHCP","objective":"解释寻址和分配","prerequisites":[]},{"title":"传输可靠性","objective":"比较 TCP 与 UDP","prerequisites":["IP"]}]}
+            answer['modules']=(answer['modules']*3)[:self.module_count]
         else:
             data=json.loads(prompt.split('资料：\n')[-1]);answer=module(data['module']['id'])
         return {"content":json.dumps(answer,ensure_ascii=False),"model":"test-model"}
@@ -84,6 +87,35 @@ class KnowledgeTests(unittest.TestCase):
         self.build();self.ai.calls=[]
         build_knowledge(self.store,self.ai,'video',lambda m:None,review_only=True)
         self.assertEqual(len(self.ai.calls),1)
+    def test_resume_after_review_timeout_keeps_completed_modules(self):
+        generate=self.ai.harness_generate
+        def timeout(prompt):
+            if '独立的第二轮自查' in prompt:raise IntegrationError('超时')
+            return generate(prompt)
+        self.ai.harness_generate=timeout
+        with self.assertRaises(IntegrationError):self.build()
+        self.assertIsNone(self.store.read()['videos'][0]['knowledge'])
+        self.ai.harness_generate=generate;self.ai.calls=[]
+        result=self.build()
+        self.assertEqual(len(self.ai.calls),1)
+        self.assertEqual(len(result['modules']),2)
+        self.assertFalse(any(v for k,v in self.ai.state.items() if k.startswith('knowledge-job-')))
+    def test_review_batches_resume_without_repeating_completed_batch(self):
+        self.ai.module_count=4;generate=self.ai.harness_generate;reviews=[]
+        def interrupted(prompt):
+            if '独立的第二轮自查' in prompt:
+                group=json.loads(prompt.split('资料：\n')[-1])['draft']['modules']
+                reviews.append([m['id'] for m in group])
+                if len(reviews)==2:raise IntegrationError('第二批超时')
+            return generate(prompt)
+        self.ai.harness_generate=interrupted
+        with self.assertRaises(IntegrationError):self.build()
+        self.assertEqual(reviews,[['m1','m2'],['m3','m4']])
+        self.ai.harness_generate=generate;self.ai.calls=[]
+        result=self.build()
+        self.assertEqual(len(self.ai.calls),1)
+        self.assertEqual(len(result['modules']),4)
+        self.assertIn('第 2 批',result['review']['summary'])
     def test_duplicate_module_or_malformed_concept_rejected(self):
         k=self.build();k['modules'][1]['id']=k['modules'][0]['id']
         with self.assertRaises(IntegrationError):validate_knowledge(k)
