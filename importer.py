@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import Request, urlopen
 from integrations import IntegrationError, prepare_material
 from note_results import apply_ai_summary
+from knowledge import build_knowledge as make_knowledge, material_for
 
 ACTIVE = {"queued", "metadata", "transcript", "ai"}
 
@@ -62,7 +63,7 @@ class AutoImporter:
                 store.save(data)
         threading.Thread(target=self.worker, daemon=True, name="video-import").start()
 
-    def submit(self, raw, retry=False):
+    def submit(self, raw, retry=False, detailed=False):
         url = youtube_url(raw)
         with self.lock, self.store.lock:
             data = self.store.read()
@@ -81,8 +82,26 @@ class AutoImporter:
                 data["videos"].append(existing)
             existing["automation"] = {"status": "queued", "message": "链接已保存，等待自动整理"}
             saved = self.store.save(data)
-            self.queue.put_nowait(existing["id"])
+            self.queue.put_nowait((existing["id"], "detailed" if detailed else "import"))
             return {"videoId": existing["id"], "duplicate": False, "library": saved}
+
+    def submit_knowledge(self, vid, review_only=False):
+        with self.lock, self.store.lock:
+            data = self.store.read()
+            target = next((v for v in data["videos"] if v["id"] == vid), None)
+            if not target:
+                raise IntegrationError("视频不存在")
+            material_for(target)
+            if review_only and not target.get("knowledge"):
+                raise IntegrationError("请先构建知识模块")
+            if target.get("automation", {}).get("status") in ACTIVE:
+                return {"videoId": vid, "duplicate": True, "library": data}
+            if self.queue.full():
+                raise IntegrationError("整理队列已满，请稍后再试")
+            target["automation"] = {"status": "queued", "message": "等待 AI 自查" if review_only else "等待构建详尽笔记、脑图和知识模块"}
+            saved = self.store.save(data)
+            self.queue.put_nowait((vid, "review" if review_only else "knowledge"))
+            return {"videoId": vid, "duplicate": False, "library": saved}
 
     def update(self, vid, **fields):
         with self.store.lock:
@@ -99,9 +118,12 @@ class AutoImporter:
 
     def worker(self):
         while True:
-            vid = self.queue.get()
+            vid, mode = self.queue.get()
             try:
-                self.process(vid)
+                if mode in {"knowledge", "review"}:
+                    make_knowledge(self.store, self.integrations, vid, lambda message: self.stage(vid, "ai", message), review_only=mode == "review")
+                else:
+                    self.process(vid, detailed=mode == "detailed")
             except IntegrationError as exc:
                 try:
                     self.stage(vid, "failed", str(exc))
@@ -115,7 +137,7 @@ class AutoImporter:
             finally:
                 self.queue.task_done()
 
-    def process(self, vid):
+    def process(self, vid, detailed=False):
         source = next(v for v in self.store.read()["videos"] if v["id"] == vid)
         self.stage(vid, "metadata", "正在识别标题和作者")
         try:
@@ -206,3 +228,6 @@ class AutoImporter:
             target["automation"] = {"status": "ready" if has_content else "needs_content", "message": message, "model": str(result.get("model", ""))[:200]}
             target["updatedAt"] = datetime.now(timezone.utc).isoformat()
             self.store.save(data)
+
+        if detailed and has_content:
+            make_knowledge(self.store, self.integrations, vid, lambda message: self.stage(vid, "ai", message), prepared=material)
