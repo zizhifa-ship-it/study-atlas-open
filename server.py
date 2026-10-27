@@ -18,6 +18,7 @@ from integrations import Integrations, IntegrationError
 from importer import AutoImporter
 from note_results import persist_generation
 from pdf_export import export_notes
+from knowledge import validate_knowledge
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 4 * 1024 * 1024
@@ -148,6 +149,7 @@ def validate_library(payload):
             "summary": string(video.get("summary", ""), "知识总结", 30000, True),
             "transcript": string(video.get("transcript", ""), "字幕或转录", 200000, True),
             "automation": clean_automation(video.get("automation", {})),
+            "knowledge": validate_knowledge(video.get("knowledge")),
             "notes": clean_notes,
             "createdAt": string(video.get("createdAt", ""), "创建时间", 50, True),
             "updatedAt": string(video.get("updatedAt", ""), "更新时间", 50, True)
@@ -313,6 +315,7 @@ def make_handler(store, integrations=None):
                           "/index.html": ("index.html", "text/html; charset=utf-8"),
                           "/styles.css": ("styles.css", "text/css; charset=utf-8"),
                           "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+                          "/knowledge.js": ("knowledge.js", "text/javascript; charset=utf-8"),
                           "/favicon.svg": ("favicon.svg", "image/svg+xml")}
                 if path not in assets:
                     self.respond(404, {"error": "页面不存在"})
@@ -333,7 +336,9 @@ def make_handler(store, integrations=None):
                 require(isinstance(data, dict), "请求必须是 JSON 对象")
                 path = urlsplit(self.path).path
                 if path == "/api/import":
-                    result = importer.submit(string(data.get("url"), "视频链接", 3000), data.get("retry") is True)
+                    result = importer.submit(string(data.get("url"), "视频链接", 3000), data.get("retry") is True, data.get("detailed", True) is not False)
+                elif path == "/api/knowledge/build":
+                    result = importer.submit_knowledge(string(data.get("videoId"), "视频编号", 100), data.get("reviewOnly") is True)
                 elif path == "/api/integrations/harness/connect":
                     result = integrations.connect_harness(string(data.get("url"), "Harness 启动链接", 4000))
                 elif path == "/api/integrations/harness/check":
