@@ -101,3 +101,9 @@ class ImportTests(unittest.TestCase):
         self.importer.submit(v["url"],retry=True)
         self.importer.queue.join()
         self.assertEqual(self.store.read()["videos"][0]["summary"],v["summary"])
+
+    def test_detailed_import_invokes_knowledge_builder_exactly_once(self):
+        with patch('importer.make_knowledge') as build:
+            self.importer.submit("https://youtu.be/abcdefghijk",detailed=True)
+            self.importer.queue.join()
+        self.assertEqual(build.call_count,1)
