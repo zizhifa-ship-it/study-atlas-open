@@ -326,12 +326,13 @@ class Integrations:
         if not executable:
             raise IntegrationError("本机未安装 yt-dlp，可以先粘贴字幕或安装后读取")
         with tempfile.TemporaryDirectory() as temp:
-            args=[executable,"--skip-download","--no-playlist","--write-subs","--write-auto-subs","--sub-langs","zh-Hans,zh-CN,zh,en","--sub-format","vtt","--paths",temp,"-o","captions.%(ext)s","--",url]
+            runtime=shutil.which("node") or ("/usr/local/bin/node" if Path("/usr/local/bin/node").exists() else "")
+            args=[executable] + (["--js-runtimes", "node:"+runtime] if runtime else []) + ["--skip-download","--no-playlist","--write-subs","--write-auto-subs","--sub-langs","en-US,en,zh-Hans,zh-CN,zh","--sub-format","vtt","--paths",temp,"-o","captions.%(ext)s","--",url]
             try:
                 result=subprocess.run(args,capture_output=True,text=True,timeout=90)
             except (OSError,subprocess.TimeoutExpired):
                 raise IntegrationError("字幕读取超时或工具无法运行，可以在视频页面复制转录文本")
-            files=sorted(Path(temp).glob("*.vtt"),key=lambda p:('zh' not in p.name,p.name))
+            files=sorted(Path(temp).glob("*.vtt"),key=lambda p:('en-US' not in p.name, 'en' not in p.name,p.name))
             if not files:
                 raise IntegrationError("没有取得可用字幕。视频可能无字幕或平台限制自动读取，请在视频页复制转录文本")
             lines,previous=[],""

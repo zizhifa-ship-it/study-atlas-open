@@ -15,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
 from integrations import Integrations, IntegrationError
+from importer import AutoImporter
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 4 * 1024 * 1024
@@ -52,6 +53,14 @@ def identifier(value):
 def integer(value, label, maximum):
     require(type(value) is int and 0 <= value <= maximum, label + "格式不正确")
     return value
+
+
+def clean_automation(value):
+    require(isinstance(value, dict), "整理进度格式不正确")
+    status = value.get("status", "")
+    require(status in {"", "queued", "metadata", "transcript", "ai", "ready", "needs_content", "failed"}, "整理状态不正确")
+    return {"status": status, "message": string(value.get("message", ""), "整理说明", 1000, True),
+            "model": string(value.get("model", ""), "整理模型", 200, True)}
 
 
 def validate_library(payload):
@@ -135,6 +144,7 @@ def validate_library(payload):
             "status": status, "favorite": video.get("favorite", False),
             "summary": string(video.get("summary", ""), "知识总结", 30000, True),
             "transcript": string(video.get("transcript", ""), "字幕或转录", 200000, True),
+            "automation": clean_automation(video.get("automation", {})),
             "notes": clean_notes,
             "createdAt": string(video.get("createdAt", ""), "创建时间", 50, True),
             "updatedAt": string(video.get("updatedAt", ""), "更新时间", 50, True)
@@ -214,6 +224,7 @@ class LibraryStore:
 
 def make_handler(store, integrations=None):
     integrations = integrations or Integrations(store.path.parent / "test-integrations")
+    importer = AutoImporter(store, integrations)
     class Handler(BaseHTTPRequestHandler):
         server_version = "StudyAtlas/1.0"
 
@@ -307,7 +318,9 @@ def make_handler(store, integrations=None):
                 data = json.loads(self.rfile.read(length).decode("utf-8"))
                 require(isinstance(data, dict), "请求必须是 JSON 对象")
                 path = urlsplit(self.path).path
-                if path == "/api/integrations/harness/connect":
+                if path == "/api/import":
+                    result = importer.submit(string(data.get("url"), "视频链接", 3000), data.get("retry") is True)
+                elif path == "/api/integrations/harness/connect":
                     result = integrations.connect_harness(string(data.get("url"), "Harness 启动链接", 4000))
                 elif path == "/api/integrations/harness/check":
                     result = integrations.check_harness()
