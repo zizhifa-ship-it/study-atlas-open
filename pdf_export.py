@@ -182,17 +182,19 @@ def make_pdf(payload):
             canvas.setFillColor(colors.HexColor("#e2edca"))
             canvas.roundRect(38, root_y, self.width - 76, 43, 7, stroke=1, fill=1)
             label(self.knowledge["title"], 48, root_y + 27, self.width - 96, 10, 2)
+            last_row = (len(self.knowledge["modules"]) - 1) // 2
+            canvas.line(center, root_y, center, root_y - 77 - last_row * 130)
             for index, module in enumerate(self.knowledge["modules"]):
                 row, col = divmod(index, 2)
                 x, y = col * (self.width / 2 + 5), root_y - 45 - row * 130
                 card_w = self.width / 2 - 10
                 canvas.setStrokeColor(colors.HexColor("#b7cba8"))
-                canvas.line(center, root_y, x + card_w / 2, y + 18)
+                canvas.line(center, y - 32, x + card_w if col == 0 else x, y - 32)
                 canvas.setFillColor(colors.HexColor("#f0f5e8"))
                 canvas.roundRect(x, y - 85, card_w, 106, 7, stroke=1, fill=1)
                 label(module["title"], x + 9, y + 5, card_w - 18, 9, 2)
-                names = " / ".join(c["name"] for c in module["concepts"][:4])
-                label(names, x + 9, y - 31, card_w - 18, 8, 3)
+                for offset, concept in enumerate(module["concepts"][:4]):
+                    label(concept["name"], x + 9, y - 31 - offset * 13, card_w - 18, 8, 1)
 
     categories = {c["id"]: c for c in payload["categories"]}
     def category_name(cid):
