@@ -164,7 +164,7 @@ class Integrations:
         sid = session["sessionId"]
         self.rpc(config, "session/rename", {"request":{"sessionId":sid,"title":"学习图谱 · 知识整理"}})
         self.rpc(config, "session/prompt", {"request":{"sessionId":sid, "requestId":str(uuid.uuid4()), "mode":"queue", "content":[{"type":"text","text":prompt}], "clientTimeZone":"Asia/Shanghai"}})
-        deadline, last_seq = time.monotonic() + 180, -1
+        deadline, last_seq = time.monotonic() + 600, -1
         try:
             while time.monotonic() < deadline:
                 projection = self.rpc(config, "session/projections", {"request":{"sessionId":sid}})
