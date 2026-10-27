@@ -67,3 +67,17 @@ class PDFTests(unittest.TestCase):
             self.assertEqual(len(images),len(reader.pages))
             self.assertEqual(z.read('AI学习笔记.pdf'),pdf)
             self.assertTrue(z.read(images[0]).startswith(b'\x89PNG'))
+
+    def test_pdf_exports_brain_diagram_detailed_modules_and_open_issues(self):
+        from pypdf import PdfReader
+        data=fixture()
+        data['videos'][0]['knowledge']={"title":"诊断知识模块","overview":"先寻址再检查应用。","materialKind":"原始字幕","modules":[{
+            "id":"m1","title":"网络可达性","objective":"区分可达与应用正常","prerequisites":["IP 地址"],
+            "notes":"## 边界解释\n能收到 ping 响应，不代表应用端口一定正常。[S1]",
+            "concepts":[{"name":"ICMP","explanation":"协助诊断连通性。"}],"examples":["课程的 ping 示例。"],"pitfalls":["不要把网络可达等同应用可用。"],
+            "questions":[{"question":"能 ping 通足够吗？","answer":"还需要核对应用状态。"}],"evidence":["原始字幕摘录。"]}],
+            "review":{"summary":"仍有例子需要核对。","issues":[{"resolved":False,"problem":"示例适用条件尚未确认。","suggestion":"回看课程示例。"}]}}
+        reader=PdfReader(io.BytesIO(make_pdf(select_notes(data))))
+        text='\n'.join(p.extract_text() for p in reader.pages)
+        for expected in ['知识脑图','详尽知识模块','AI 自查报告','示例适用条件尚未确认','还需要核对应用状态']:
+            self.assertIn(expected,text)
