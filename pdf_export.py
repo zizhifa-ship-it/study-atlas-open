@@ -19,13 +19,13 @@ def select_notes(library, video_id=""):
     videos = [v for v in library["videos"] if not video_id or v["id"] == video_id]
     if video_id and not videos:
         raise IntegrationError("没有找到这个视频")
-    selected = [v for v in videos if v.get("summary") or v.get("notes")]
+    selected = [v for v in videos if v.get("summary") or v.get("notes") or v.get("knowledge")]
     insights = library.get("insights", []) if not video_id else []
     if not selected and not insights:
         raise IntegrationError("还没有可导出的笔记，请先让 AI 整理视频")
     if len(selected) > 30 or len(insights) > 30:
         raise IntegrationError("一次最多导出 30 条视频和 30 篇归纳，请按课程分别导出")
-    return {"videos": [{k: v.get(k, "") for k in ["id", "title", "aiTitle", "author", "url", "categoryId", "summary", "notes"]} for v in selected],
+    return {"videos": [{k: v.get(k, "") for k in ["id", "title", "aiTitle", "author", "url", "categoryId", "summary", "notes", "knowledge"]} for v in selected],
             "categories": library["categories"], "insights": insights}
 
 
@@ -71,7 +71,7 @@ def make_pdf(payload):
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, PageBreak, NextPageTemplate, KeepTogether
+    from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, PageBreak, NextPageTemplate, KeepTogether, Flowable
 
     fonts = [os.environ.get("STUDY_ATLAS_PDF_FONT", ""), "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
              "/Library/Fonts/Arial Unicode.ttf", "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
@@ -151,6 +151,49 @@ def make_pdf(payload):
             else:
                 story.append(Paragraph(rich(line), styles["text"]))
 
+    class BrainDiagram(Flowable):
+        def __init__(self, knowledge):
+            Flowable.__init__(self)
+            self.knowledge = knowledge
+            self.width = body_width
+            self.height = 105 + ((len(knowledge["modules"]) + 1) // 2) * 130
+
+        def draw(self):
+            canvas = self.canv
+            def label(text, x, y, width, size=9, count=3):
+                lines, current = [], ""
+                for ch in text:
+                    if pdfmetrics.stringWidth(current + ch, "StudyChinese", size) > width:
+                        lines.append(current)
+                        current = ""
+                    current += ch
+                if current:
+                    lines.append(current)
+                if len(lines) > count:
+                    lines = lines[:count]
+                    lines[-1] = lines[-1][:-1] + "…"
+                canvas.setFont("StudyChinese", size)
+                canvas.setFillColor(ink)
+                for i, line in enumerate(lines):
+                    canvas.drawString(x, y - i * 14, line)
+            center = self.width / 2
+            root_y = self.height - 48
+            canvas.setStrokeColor(colors.HexColor("#adc29b"))
+            canvas.setFillColor(colors.HexColor("#e2edca"))
+            canvas.roundRect(38, root_y, self.width - 76, 43, 7, stroke=1, fill=1)
+            label(self.knowledge["title"], 48, root_y + 27, self.width - 96, 10, 2)
+            for index, module in enumerate(self.knowledge["modules"]):
+                row, col = divmod(index, 2)
+                x, y = col * (self.width / 2 + 5), root_y - 45 - row * 130
+                card_w = self.width / 2 - 10
+                canvas.setStrokeColor(colors.HexColor("#b7cba8"))
+                canvas.line(center, root_y, x + card_w / 2, y + 18)
+                canvas.setFillColor(colors.HexColor("#f0f5e8"))
+                canvas.roundRect(x, y - 85, card_w, 106, 7, stroke=1, fill=1)
+                label(module["title"], x + 9, y + 5, card_w - 18, 9, 2)
+                names = " / ".join(c["name"] for c in module["concepts"][:4])
+                label(names, x + 9, y - 31, card_w - 18, 8, 3)
+
     categories = {c["id"]: c for c in payload["categories"]}
     def category_name(cid):
         path, seen = [], set()
@@ -172,6 +215,40 @@ def make_pdf(payload):
         if video.get("aiTitle") and video["aiTitle"] != video["title"]:
             story.append(Paragraph("原始标题：" + rich(video["title"]), styles["meta"]))
         paragraphs(video.get("summary", "") or "尚无总结，以下为已保存的补充笔记。")
+        knowledge = video.get("knowledge")
+        if knowledge:
+            story.extend([PageBreak(), Paragraph("知识脑图", styles["title"]), Paragraph(rich(knowledge["overview"]), styles["meta"]), BrainDiagram(knowledge), PageBreak(), Paragraph("详尽知识模块", styles["title"])])
+            for module in knowledge["modules"]:
+                story.append(Paragraph(rich(module["title"]), styles["h1"]))
+                story.append(Paragraph("学习目标：" + rich(module["objective"]), styles["meta"]))
+                if module["prerequisites"]:
+                    story.append(Paragraph("前置知识：" + rich("、".join(module["prerequisites"])), styles["meta"]))
+                paragraphs(module["notes"])
+                for concept in module["concepts"]:
+                    story.append(Paragraph("<b>" + rich(concept["name"]) + "：</b>" + rich(concept["explanation"]), styles["text"]))
+                if module["examples"]:
+                    story.append(Paragraph("课程例子与步骤", styles["h2"]))
+                    for text in module["examples"]:
+                        paragraphs(text)
+                if module["pitfalls"]:
+                    story.append(Paragraph("易错点与边界", styles["h2"]))
+                    for text in module["pitfalls"]:
+                        paragraphs("- " + text)
+                if module["questions"]:
+                    story.append(Paragraph("复习与参考答案", styles["h2"]))
+                    for question in module["questions"]:
+                        paragraphs("问题：" + question["question"])
+                        paragraphs("参考答案：" + question["answer"])
+                if module["evidence"]:
+                    story.append(Paragraph("依据摘录 [S1] · " + rich(knowledge["materialKind"]), styles["h2"]))
+                    for text in module["evidence"]:
+                        story.append(Paragraph(rich(text), styles["meta"]))
+            story.extend([PageBreak(), Paragraph("AI 自查报告", styles["title"]), Paragraph(rich(knowledge["review"]["summary"]), styles["text"]), Paragraph("AI 自查不保证所有结论正确；摘录匹配只核对文字是否出现，请结合原课检查。", styles["meta"])])
+            for issue in knowledge["review"]["issues"]:
+                story.append(Paragraph(("已修订" if issue["resolved"] else "待核对") + "：" + rich(issue["problem"]), styles["h2"]))
+                paragraphs("核对建议：" + issue["suggestion"])
+            if not knowledge["review"]["issues"]:
+                paragraphs("本轮没有提出具体问题；关键结论仍需结合原课程核对。")
         for note in video.get("notes", []):
             if note["text"].startswith("旧版总结（"):
                 continue  # 旧版本仍留在 JSON，不把历史全文重复印入阅读版。
