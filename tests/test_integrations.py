@@ -1,5 +1,6 @@
 """外部服务使用模拟结果；这些测试不会调用付费模型或读取个人账号。"""
 import json
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -73,6 +74,14 @@ class IntegrationTests(unittest.TestCase):
         for secret in ["test-private-key","test-token","test-refresh"]:
             self.assertNotIn(secret,data)
         self.assertEqual((Path(self.temp.name)/".local/ai.json").stat().st_mode&0o777,0o600)
+
+    def test_direct_api_rejects_truncated_output(self):
+        self.engine.save_ai({"mode":"deepseek","apiKey":"test-private-key"})
+        response = {"choices":[{"finish_reason":"length","message":{"content":"{\"notes\":\"unfinished"}}]}
+        with patch("integrations.urlopen", return_value=io.BytesIO(json.dumps(response).encode())) as request:
+            with self.assertRaisesRegex(IntegrationError, "长度上限"):
+                self.engine.deepseek_generate("测试资料")
+        self.assertEqual(json.loads(request.call_args.args[0].data)["max_tokens"],8192)
 
     def test_youtube_import_keeps_pagination_and_video_metadata(self):
         fake={"items":[{"snippet":{"title":"课程一","videoOwnerChannelTitle":"老师"},"contentDetails":{"videoId":"abcdefghijk"}}],"nextPageToken":"next-page"}
