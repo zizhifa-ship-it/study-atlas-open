@@ -52,6 +52,7 @@ async function save(next) {
 
 const category = id => state.library.categories.find(c => c.id === id);
 const video = id => state.library.videos.find(v => v.id === id);
+const displayTitle = v => v.aiTitle || v.title;
 const children = id => state.library.categories.filter(c => c.parentId === id);
 function categoryPath(id) {
   const result = [];
@@ -151,7 +152,7 @@ function categoryCard(c) {
   return `<article class="category-card ${c.color}"><div class="category-tools"><button class="icon-button" aria-label="编辑分类 ${esc(c.name)}" data-action="edit-category" data-id="${esc(c.id)}">···</button></div><button class="category-open" aria-label="打开分类 ${esc(c.name)}" data-action="navigate" data-view="category" data-id="${esc(c.id)}"><span class="category-icon">${icon(symbol)}</span><h3>${esc(c.name)}</h3><p>${esc(c.description || '为这个方向建立你自己的知识目录。')}</p><div class="category-meta"><span>${videos.length} 个视频</span><span>·</span><span>${children(c.id).length} 个子分类</span><span>↗</span></div></button></article>`;
 }
 function videoCard(v) {
-  return `<article class="video-card"><button class="video-cover" data-action="navigate" data-view="video" data-id="${esc(v.id)}" aria-label="查看视频 ${esc(v.title)}"><span class="cover-visual">${networkArt}</span><span class="cover-label">${esc(platform(v.url))} / ${esc(category(v.categoryId)?.name)}</span><span class="cover-title">${esc(category(v.categoryId)?.name || '我的课程')}<br>Learning notes.</span><span class="cover-play">▶</span>${v.durationSec ? `<span class="duration">${timeLabel(v.durationSec)}</span>` : ''}</button><div class="video-body"><div class="card-topline"><span>${esc(pathName(v.categoryId))}</span><span class="status-pill ${v.status}">${statusNames[v.status]}</span></div><button class="video-title" data-action="navigate" data-view="video" data-id="${esc(v.id)}">${esc(v.title)}</button><p class="video-author">${esc(v.author || '作者待补充')}</p>${v.automation?.status ? `<p class="import-state">${esc(importNames[v.automation.status] || '')}</p>` : ''}<div class="tags">${v.tags.slice(0,5).map(t => `<button class="tag" data-action="search-tag" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}</div><div class="video-foot"><span>${noteCount([v])} 篇笔记</span><button class="icon-button favorite${v.favorite ? ' active' : ''}" aria-label="${v.favorite ? '取消重点收藏' : '重点收藏'} ${esc(v.title)}" data-action="favorite" data-id="${esc(v.id)}">${icon('star')}</button></div></div></article>`;
+  return `<article class="video-card"><button class="video-cover" data-action="navigate" data-view="video" data-id="${esc(v.id)}" aria-label="查看视频 ${esc(displayTitle(v))}"><span class="cover-visual">${networkArt}</span><span class="cover-label">${esc(platform(v.url))} / ${esc(category(v.categoryId)?.name)}</span><span class="cover-title">${esc(category(v.categoryId)?.name || '我的课程')}<br>学习笔记。</span><span class="cover-play">▶</span>${v.durationSec ? `<span class="duration">${timeLabel(v.durationSec)}</span>` : ''}</button><div class="video-body"><div class="card-topline"><span>${esc(pathName(v.categoryId))}</span><span class="status-pill ${v.status}">${statusNames[v.status]}</span></div><button class="video-title" data-action="navigate" data-view="video" data-id="${esc(v.id)}">${esc(displayTitle(v))}</button><p class="video-author">${esc(v.author || '作者待补充')}</p>${v.automation?.status ? `<p class="import-state">${esc(importNames[v.automation.status] || '')}</p>` : ''}<div class="tags">${v.tags.slice(0,5).map(t => `<button class="tag" data-action="search-tag" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}</div><div class="video-foot"><span>${noteCount([v])} 篇笔记</span><button class="icon-button favorite${v.favorite ? ' active' : ''}" aria-label="${v.favorite ? '取消重点收藏' : '重点收藏'} ${esc(displayTitle(v))}" data-action="favorite" data-id="${esc(v.id)}">${icon('star')}</button></div></div></article>`;
 }
 function empty(title, text, action = '') {
   return `<div class="empty-state"><h3>${title}</h3><p>${text}</p>${action}</div>`;
@@ -164,11 +165,11 @@ const addCategoryButton = '<button class="button" data-action="new-category">' +
 function homePage() {
   const {videos, categories} = state.library;
   const learning = videos.filter(v => v.status === 'learning').slice(0, 1);
-  return heading('YOUR PERSONAL KNOWLEDGE SPACE', '把好奇，整理成知识。', '粘贴公开视频链接，自动识别、分类并整理学习笔记。', addCategoryButton + addVideoButton)
-    + `<section class="hero"><div class="hero-copy"><div class="hero-kicker">COLLECT · UNDERSTAND · CONNECT</div><h2>收藏只是开始，<br>理解才是<em>你的收获。</em></h2><p>只需一个链接，让 AI 把视频归入知识目录，留下有来源的学习笔记。</p><div class="steps"><span><b>01</b> 粘贴链接</span><span><b>02</b> 自动分类</span><span><b>03</b> 生成笔记</span></div></div><div class="hero-visual">${networkArt}</div></section>`
+  return heading('我的学习知识库', '把好奇，整理成知识。', '粘贴公开视频链接，自动识别、分类并整理学习笔记。', addCategoryButton + addVideoButton)
+    + `<section class="hero"><div class="hero-copy"><div class="hero-kicker">收藏 · 理解 · 融会贯通</div><h2>收藏只是开始，<br>理解才是<em>你的收获。</em></h2><p>只需一个链接，让 AI 把视频归入知识目录，留下有来源的学习笔记。</p><div class="steps"><span><b>01</b> 粘贴链接</span><span><b>02</b> 自动分类</span><span><b>03</b> 生成笔记</span></div></div><div class="hero-visual">${networkArt}</div></section>`
     + `<div class="stat-row">${[[categories.length,'个分类','让知识各归其位'],[videos.length,'个视频','收藏每一个启发'],[videos.filter(v => v.status === 'done').length,'个学完','一点进步，也算数'],[noteCount(videos),'篇笔记','留下自己的理解']].map(([n,label,tip])=>`<div class="stat"><div><strong>${n}</strong><span>${label}</span></div><small>${tip}</small></div>`).join('')}</div>`
-    + `<section><div class="section-head"><h2>我的学习分类 <span>LEARNING COLLECTIONS</span></h2><button class="text-button" data-action="new-category">管理自己的知识目录 ＋</button></div><div class="category-grid">${children(null).map(categoryCard).join('')}</div>${!categories.length ? empty('从第一个分类开始', '可以先建立“网络工程”，再在里面添加“网络基础”。', addCategoryButton) : ''}</section>`
-    + `<section><div class="section-head"><h2>${learning.length ? '继续上次的学习' : '最近收藏'} <span>KEEP YOUR CURIOSITY</span></h2><button class="text-button" data-action="navigate" data-view="videos">查看全部 →</button></div>${videos.length ? `<div class="continue-grid"><div>${(learning.length ? learning : videos.slice(-1)).map(videoCard).join('')}</div><aside class="learning-tip"><div class="tip-kicker">A LITTLE REMINDER</div><h3>看到一个好视频，<br>复制链接，让 AI 帮你整理。</h3><p>网站读取可用字幕，由 DeepSeek 自动分类、写笔记并保存。看完后核对和补充自己的理解，让知识真正属于你。</p></aside></div>` : empty('还没有收藏视频', '粘贴公开 YouTube 视频链接，自动归类并整理笔记。', addVideoButton)}</section>`;
+    + `<section><div class="section-head"><h2>我的学习分类 <span>学习分类</span></h2><button class="text-button" data-action="new-category">管理自己的知识目录 ＋</button></div><div class="category-grid">${children(null).map(categoryCard).join('')}</div>${!categories.length ? empty('从第一个分类开始', '可以先建立“网络工程”，再在里面添加“网络基础”。', addCategoryButton) : ''}</section>`
+    + `<section><div class="section-head"><h2>${learning.length ? '继续上次的学习' : '最近收藏'} <span>继续学习</span></h2><button class="text-button" data-action="navigate" data-view="videos">查看全部 →</button></div>${videos.length ? `<div class="continue-grid"><div>${(learning.length ? learning : videos.slice(-1)).map(videoCard).join('')}</div><aside class="learning-tip"><div class="tip-kicker">学习小提醒</div><h3>看到一个好视频，<br>复制链接，让 AI 帮你整理。</h3><p>网站读取可用字幕，由 DeepSeek 自动分类、写笔记并保存。看完后核对和补充自己的理解，让知识真正属于你。</p></aside></div>` : empty('还没有收藏视频', '粘贴公开 YouTube 视频链接，自动归类并整理笔记。', addVideoButton)}</section>`;
 }
 function filteredVideos(videos) {
   return videos.filter(v => (state.status === 'all' || v.status === state.status) && (!state.favorites || v.favorite));
@@ -179,21 +180,21 @@ function videoSection(videos) {
 }
 function categoryPage() {
   const c = category(state.id);
-  return heading('LEARNING COLLECTION', c.name, c.description || '给学习一个清晰的方向。', `<button class="button" data-action="synthesize">${icon('spark')}归纳共通经验</button><button class="button" data-action="edit-category" data-id="${esc(c.id)}">编辑分类</button>` + addCategoryButton + addVideoButton)
+  return heading('学习目录', c.name, c.description || '给学习一个清晰的方向。', `<button class="button" data-action="synthesize">${icon('spark')}归纳共通经验</button><button class="button" data-action="edit-category" data-id="${esc(c.id)}">编辑分类</button>` + addCategoryButton + addVideoButton)
     + (children(c.id).length ? `<div class="section-head"><h2>子分类</h2></div><div class="category-grid">${children(c.id).map(categoryCard).join('')}</div>` : '')
     + '<div class="section-head"><h2>分类里的视频</h2></div>' + videoSection(categoryVideos(c.id));
 }
 function notesPage() {
   const videos = state.library.videos.filter(v => v.summary || v.notes.length);
-  return heading('FROM VIDEOS TO KNOWLEDGE', '学习笔记', '把别人的讲解，转化成自己的理解。')
-    + (videos.length ? videos.map(v => `<article class="knowledge-card"><span class="small-label">${esc(pathName(v.categoryId))}</span><h2>${esc(v.title)}</h2>${v.summary ? `<div class="note-text">${esc(v.summary)}</div>` : ''}${v.notes.map(n => `<div class="note"><div class="note-header"><a class="note-time" href="${esc(jumpURL(v,n.timeSec))}" target="_blank" rel="noopener noreferrer">${timeLabel(n.timeSec)} ↗</a></div><div class="note-text">${esc(n.text)}</div></div>`).join('')}<button class="link-button" data-action="navigate" data-view="video" data-id="${esc(v.id)}">打开视频与笔记 →</button></article>`).join('') : empty('你的第一篇笔记，从一个问题开始', '打开一个视频，写下“这个概念解决什么问题？”', '<button class="button primary" data-action="navigate" data-view="videos">选择视频</button>'));
+  return heading('把课程转化为知识', '学习笔记', 'AI 负责梳理知识与总结，你专注理解、提问和批注。', exportButtons() + '<button class="button" data-action="batch-ai">AI 整理待办</button>')
+    + (videos.length ? videos.map(v => `<article class="knowledge-card"><span class="small-label">${esc(pathName(v.categoryId))}</span><h2>${esc(displayTitle(v))}</h2>${v.summary ? `<div class="rich-notes">${renderMarkdown(v.summary)}</div>` : ''}${v.notes.map(n => `<div class="note"><div class="note-header"><a class="note-time" href="${esc(jumpURL(v,n.timeSec))}" target="_blank" rel="noopener noreferrer">${timeLabel(n.timeSec)} ↗</a></div><div class="note-text">${esc(n.text)}</div></div>`).join('')}<button class="link-button" data-action="navigate" data-view="video" data-id="${esc(v.id)}">打开视频与笔记 →</button></article>`).join('') : empty('你的第一篇笔记，从一个问题开始', '打开一个视频，写下“这个概念解决什么问题？”', '<button class="button primary" data-action="navigate" data-view="videos">选择视频</button>'));
 }
 function detailPage() {
   const v = video(state.id);
   return `<button class="back-button" data-action="navigate" data-view="category" data-id="${esc(v.categoryId)}">← 返回 ${esc(pathName(v.categoryId))}</button>`
-    + heading(platform(v.url).toUpperCase() + ' / VIDEO NOTES', v.title, v.author || '作者待补充', `<button class="button soft" data-action="ai-summary" data-id="${esc(v.id)}">${icon('spark')}AI 整理笔记</button><button class="button" data-action="edit-video" data-id="${esc(v.id)}">编辑视频</button>`)
+    + heading(platform(v.url) + ' / 中文学习笔记', displayTitle(v), v.author || '作者待补充', exportButtons(v.id) + `<button class="button soft" data-action="ai-summary" data-id="${esc(v.id)}">${icon('spark')}AI 自动写好笔记</button><button class="button" data-action="edit-video" data-id="${esc(v.id)}">编辑视频</button>`)
     + automationPanel(v)
-    + `<div class="detail-layout"><div><section class="watch-banner"><div><h2>先观看，再留下自己的理解。</h2><p>在原平台观看视频，回到这里记录知识点。${v.durationSec ? '视频时长 ' + timeLabel(v.durationSec) + '。' : ''}</p></div><a class="button primary" href="${esc(v.url)}" target="_blank" rel="noopener noreferrer">打开视频 ↗</a></section><section class="panel"><div class="section-head" style="margin-top:0"><h2>字幕与学习资料</h2><button class="button small" data-action="fetch-transcript" data-id="${esc(v.id)}">读取 YouTube 字幕</button></div><form id="transcript-form"><label class="field"><span>转录文本 / 课堂资料（供 AI 整理使用）</span><textarea name="transcript" maxlength="200000" rows="6" placeholder="读取字幕，或将视频页面的转录文本粘贴到这里。AI 会依据这些资料及你的笔记整理。">${esc(v.transcript || '')}</textarea><small>${(v.transcript || '').length.toLocaleString()} 字符 · 资料先保存，AI 才会使用；部分视频的字幕可能无法自动读取。</small></label><button class="button small" type="submit">保存学习资料</button></form></section><section class="panel"><h2>知识总结</h2><form id="summary-form"><label class="field"><span>这个视频主要讲了什么？</span><textarea name="summary" maxlength="30000" placeholder="用自己的话记录核心概念、适用场景、还没弄懂的问题…">${esc(v.summary)}</textarea></label><button class="button small" type="submit">保存总结</button></form></section><section class="panel"><div class="section-head" style="margin-top:0"><h2>时间点笔记 <span>${v.notes.length} NOTES</span></h2><button class="button small soft" data-action="new-note" data-id="${esc(v.id)}">＋ 写笔记</button></div>${v.notes.length ? v.notes.slice().sort((a,b)=>(a.timeSec ?? Infinity)-(b.timeSec ?? Infinity)).map(n => `<article class="note"><div class="note-header"><a class="note-time" href="${esc(jumpURL(v,n.timeSec))}" target="_blank" rel="noopener noreferrer">${timeLabel(n.timeSec)} ↗</a><span class="note-date">${esc(n.createdAt.slice(0,10))}</span><button class="icon-button" aria-label="编辑笔记 ${esc(n.text.slice(0,30))}" data-action="edit-note" data-id="${esc(n.id)}">···</button></div><div class="note-text">${esc(n.text)}</div></article>`).join('') : '<p class="metadata">遇到一个值得记住的概念，标上时间，写下一句话。</p>'}</section></div><aside><section class="panel"><h2>学习进度</h2><label class="field"><span>当前状态</span><select id="detail-status">${Object.entries(statusNames).map(([id,name])=>`<option value="${id}"${v.status === id ? ' selected' : ''}>${name}</option>`).join('')}</select></label><button class="button small${v.favorite ? ' soft' : ''}" data-action="favorite" data-id="${esc(v.id)}">${icon('star')}${v.favorite ? '已重点收藏' : '加入重点收藏'}</button><div class="metadata"><strong>所属分类</strong><p>${esc(pathName(v.categoryId))}</p><strong>标签</strong><div class="tags">${v.tags.map(t=>`<button class="tag" data-action="search-tag" data-tag="${esc(t)}">${esc(t)}</button>`).join('') || '尚未添加'}</div><strong>收藏时间</strong><p>${esc(v.createdAt.slice(0,10))}</p></div></section></aside></div>`;
+    + `<div class="detail-layout"><div><section class="watch-banner"><div><h2>AI 先整理，你再理解与批注。</h2><p>查看自动生成的中文笔记，需要时回到原视频核对。${v.durationSec ? '视频时长 ' + timeLabel(v.durationSec) + '。' : ''}</p></div><a class="button primary" href="${esc(v.url)}" target="_blank" rel="noopener noreferrer">打开视频 ↗</a></section><section class="panel"><details><summary>字幕与学习资料（通常由网站自动读取）</summary><div class="section-head" style="margin-top:15px"><h2>原始资料</h2><button class="button small" data-action="fetch-transcript" data-id="${esc(v.id)}">读取 YouTube 字幕</button></div><form id="transcript-form"><label class="field"><span>转录文本 / 课堂资料（供 AI 整理使用）</span><textarea name="transcript" maxlength="200000" rows="6" placeholder="读取字幕，或将视频页面的转录文本粘贴到这里。AI 会依据这些资料及你的笔记整理。">${esc(v.transcript || '')}</textarea><small>${(v.transcript || '').length.toLocaleString()} 字符 · 资料先保存，AI 才会使用；部分视频的字幕可能无法自动读取。</small></label><button class="button small" type="submit">保存学习资料</button></form></details></section><section class="panel"><div class="section-head" style="margin-top:0"><h2>AI 知识总结</h2><span class="small-label">已保存 · 可导出到无边记</span></div>${v.summary ? `<div class="rich-notes">${renderMarkdown(v.summary)}</div><div class="source-list"><a href="${esc(v.url)}" target="_blank" rel="noopener noreferrer">[S1] 原视频：${esc(v.title)} ↗</a></div>` : '<p class="metadata">AI 整理完成后，知识脉络、例子与复习问题会出现在这里。</p>'}<details><summary>补充或修订总结（选填）</summary><form id="summary-form"><label class="field"><span>这个视频主要讲了什么？</span><textarea name="summary" maxlength="30000" placeholder="用自己的话记录核心概念、适用场景、还没弄懂的问题…">${esc(v.summary)}</textarea></label><button class="button small" type="submit">保存修订</button></form></details></section><section class="panel"><div class="section-head" style="margin-top:0"><h2>我的补充与批注 <span>${v.notes.length} 条补充</span></h2><button class="button small soft" data-action="new-note" data-id="${esc(v.id)}">＋ 写笔记</button></div>${v.notes.length ? v.notes.slice().sort((a,b)=>(a.timeSec ?? Infinity)-(b.timeSec ?? Infinity)).map(n => `<article class="note"><div class="note-header"><a class="note-time" href="${esc(jumpURL(v,n.timeSec))}" target="_blank" rel="noopener noreferrer">${timeLabel(n.timeSec)} ↗</a><span class="note-date">${esc(n.createdAt.slice(0,10))}</span><button class="icon-button" aria-label="编辑笔记 ${esc(n.text.slice(0,30))}" data-action="edit-note" data-id="${esc(n.id)}">···</button></div><div class="note-text">${esc(n.text)}</div></article>`).join('') : '<p class="metadata">遇到一个值得记住的概念，标上时间，写下一句话。</p>'}</section></div><aside><section class="panel"><h2>学习进度</h2><label class="field"><span>当前状态</span><select id="detail-status">${Object.entries(statusNames).map(([id,name])=>`<option value="${id}"${v.status === id ? ' selected' : ''}>${name}</option>`).join('')}</select></label><button class="button small${v.favorite ? ' soft' : ''}" data-action="favorite" data-id="${esc(v.id)}">${icon('star')}${v.favorite ? '已重点收藏' : '加入重点收藏'}</button><div class="metadata"><strong>所属分类</strong><p>${esc(pathName(v.categoryId))}</p><strong>标签</strong><div class="tags">${v.tags.map(t=>`<button class="tag" data-action="search-tag" data-tag="${esc(t)}">${esc(t)}</button>`).join('') || '尚未添加'}</div><strong>收藏时间</strong><p>${esc(v.createdAt.slice(0,10))}</p></div></section></aside></div>`;
 }
 function searchPage() {
   const terms = state.search.toLocaleLowerCase().split(/\s+/).filter(Boolean);
@@ -201,7 +202,7 @@ function searchPage() {
   const categories = state.library.categories.filter(c => matches(pathName(c.id) + ' ' + c.description));
   const videos = state.library.videos.filter(v => matches([v.title,v.author,v.tags.join(' '),pathName(v.categoryId),v.summary,...v.notes.map(n=>n.text)].join(' ')));
   const insights = (state.library.insights || []).filter(x=>matches(x.title+' '+x.content));
-  return heading('SEARCH YOUR KNOWLEDGE', `搜索“${state.search}”`, '搜索范围包含分类、视频标题、作者、标签、知识总结和时间点笔记。')
+  return heading('搜索我的知识库', `搜索“${state.search}”`, '搜索范围包含分类、视频标题、作者、标签、知识总结和时间点笔记。')
     + (categories.length ? `<div class="section-head"><h2>相关分类</h2></div><div class="category-grid">${categories.map(categoryCard).join('')}</div>` : '')
     + `<div class="section-head"><h2>相关视频与笔记</h2></div>${videos.length ? `<div class="video-list">${videos.map(videoCard).join('')}</div>` : empty('没有找到匹配视频', '试试更短的关键词，或检查视频和笔记是否已经保存。')}`
     + (insights.length ? '<div class="section-head"><h2>相关共通经验</h2></div>'+insights.map(insightCard).join('') : '');
@@ -214,7 +215,7 @@ function renderMain() {
   else if (state.view === 'video') html = detailPage();
   else if (state.view === 'notes') html = notesPage();
   else if (state.view === 'insights') html = insightsPage();
-  else if (state.view === 'videos') html = heading('YOUR VIDEO LIBRARY','全部视频','收藏有价值的课程，按照自己的节奏学习。',addVideoButton) + videoSection(state.library.videos);
+  else if (state.view === 'videos') html = heading('我的视频库','全部视频','收藏有价值的课程，按照自己的节奏学习。',addVideoButton) + videoSection(state.library.videos);
   else html = homePage();
   $('#content').innerHTML = html;
   const name = state.search ? '搜索' : state.view === 'category' ? pathName(state.id) : state.view === 'video' ? pathName(video(state.id).categoryId) + ' / 视频笔记' : ({home:'分类总览',videos:'全部视频',notes:'学习笔记',insights:'AI 总结与经验'}[state.view] || '分类总览');
@@ -270,7 +271,7 @@ function smartImportModal() {
 function videoModal(id) {
   if (!state.library.categories.length) { toast('先创建一个分类，再收藏视频'); categoryModal(); return; }
   const v = id ? video(id) : {title:'',url:'',author:'',categoryId:state.view === 'category' ? state.id : state.library.categories[0].id,tags:[],durationSec:0,status:'todo'};
-  showModal(id ? '编辑视频' : '把好视频放进分类', '支持 YouTube、哔哩哔哩和其他课程链接。标题由你填写，方便以后找到。', `<form><label class="field"><span>视频链接</span><input name="url" required maxlength="3000" placeholder="https://www.youtube.com/watch?v=…" value="${esc(v.url)}"></label><label class="field"><span>视频标题</span><input name="title" required maxlength="500" placeholder="给课程一个好找的名字" value="${esc(v.title)}"></label><label class="field"><span>放入分类</span><select name="categoryId" required>${categoryOptions(v.categoryId)}</select></label><div class="field-row"><label class="field"><span>作者 / 频道（选填）</span><input name="author" maxlength="200" value="${esc(v.author)}"></label><label class="field"><span>时长（选填）</span><input name="duration" placeholder="例如：8:26" value="${v.durationSec ? timeLabel(v.durationSec) : ''}"></label></div><label class="field"><span>标签（选填）</span><input name="tags" maxlength="1200" placeholder="用逗号分隔，例如：OSI, TCP/IP, 网络入门" value="${esc(v.tags.join(', '))}"></label><label class="field"><span>学习状态</span><select name="status">${Object.entries(statusNames).map(([value,name])=>`<option value="${value}"${v.status === value ? ' selected' : ''}>${name}</option>`).join('')}</select></label>${actions('保存视频',id ? `<button type="button" class="button danger" data-action="delete-video" data-id="${esc(id)}">移除视频</button>` : '')}</form>`, async form => {
+  showModal(id ? '编辑视频' : '把好视频放进分类', '支持 YouTube、哔哩哔哩和其他课程链接。标题由你填写，方便以后找到。', `<form><label class="field"><span>视频链接</span><input name="url" required maxlength="3000" placeholder="https://www.youtube.com/watch?v=…" value="${esc(v.url)}"></label><label class="field"><span>视频标题</span><input name="title" required maxlength="500" placeholder="给课程一个好找的名字" value="${esc(displayTitle(v))}"></label><label class="field"><span>放入分类</span><select name="categoryId" required>${categoryOptions(v.categoryId)}</select></label><div class="field-row"><label class="field"><span>作者 / 频道（选填）</span><input name="author" maxlength="200" value="${esc(v.author)}"></label><label class="field"><span>时长（选填）</span><input name="duration" placeholder="例如：8:26" value="${v.durationSec ? timeLabel(v.durationSec) : ''}"></label></div><label class="field"><span>标签（选填）</span><input name="tags" maxlength="1200" placeholder="用逗号分隔，例如：OSI, TCP/IP, 网络入门" value="${esc(v.tags.join(', '))}"></label><label class="field"><span>学习状态</span><select name="status">${Object.entries(statusNames).map(([value,name])=>`<option value="${value}"${v.status === value ? ' selected' : ''}>${name}</option>`).join('')}</select></label>${actions('保存视频',id ? `<button type="button" class="button danger" data-action="delete-video" data-id="${esc(id)}">移除视频</button>` : '')}</form>`, async form => {
     const url = canonicalURL(form.get('url'));
     if (state.library.videos.some(other=>other.id !== id && canonicalURL(other.url) === url)) throw new Error('这个视频已经收藏过了，可以在搜索中找到它');
     const next = structuredClone(state.library);
@@ -291,8 +292,50 @@ function noteModal(id) {
 function confirmModal(title, description, callback) {
   showModal(title,description,`<form>${actions('确认')}</form>`,callback);
 }
+function renderMarkdown(markdown) {
+  const inline=text=>esc(text).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>');
+  let list=false,code=false,html='';
+  for(const raw of markdown.split('\n')) {
+    const line=raw.trim();
+    if(line.startsWith('```')) {if(list){html+='</ul>';list=false;}code=!code;html+=code?'<pre><code>':'</code></pre>';continue;}
+    if(code){html+=esc(raw)+'\n';continue;}
+    if(/^[-*] /.test(line)){if(!list){html+='<ul>';list=true;}html+='<li>'+inline(line.slice(2))+'</li>';continue;}
+    if(list){html+='</ul>';list=false;}
+    const heading=line.match(/^(#{1,6})\s+(.+)/);
+    if(heading){const level=Math.min(4,heading[1].length+1);html+=`<h${level}>${inline(heading[2])}</h${level}>`;}
+    else if(line) html+='<p>'+inline(line)+'</p>';
+  }
+  if(list)html+='</ul>';if(code)html+='</code></pre>';
+  return html;
+}
+function exportButtons(id='') {
+  return `<button class="button soft" data-action="ipad-export" data-id="${esc(id)}">导出到 iPad 无边记</button>`;
+}
+function ipadExportModal(id='') {
+  showModal('带到 iPad，在无边记继续思考','导出仅使用已保存的笔记、补充和经验归纳，不包含原始字幕、账号或密钥。',`<div class="backup-option"><div><h3>无边记素材包 · 图片＋PDF</h3><p>每页一张清晰图片，带批注留白；解压后把所需图片拖进看板。</p></div><button class="button small primary" data-action="download-study" data-kind="freeform" data-video="${esc(id)}">下载素材包</button></div><div class="backup-option"><div><h3>阅读与归档 · PDF</h3><p>保留可选择的文字、视频来源链接和手写练习页。</p></div><button class="button small" data-action="download-study" data-kind="pdf" data-video="${esc(id)}">下载 PDF</button></div><ol class="help-list"><li>通过 AirDrop 或你自己的 iCloud 云盘传到 iPad。</li><li>在“文件”里轻点 ZIP 解压，分屏拖入 PNG 图片到无边记；也可插入 PDF 作为附件。</li><li>用 Apple Pencil 或手指在画布上添加手写、文本和连线。</li></ol><p class="modal-description" style="margin-top:14px">图片里的文字不能直接编辑。无边记中的批注由无边记保存，不会自动回写本网站；AI 原稿会继续留在知识库。</p><div class="modal-actions"><button class="button" data-action="close-modal">完成</button></div>`);
+}
+async function downloadStudy(kind,id,button) {
+  const label=button.textContent;button.disabled=true;button.textContent='正在生成…';
+  try {
+    const response=await fetch('/api/export?format='+encodeURIComponent(kind)+(id?'&videoId='+encodeURIComponent(id):''));
+    if(!response.ok) {const result=await response.json();throw new Error(result.error || '导出失败');}
+    const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');
+    link.href=url;link.download=kind==='freeform'?'无边记学习素材.zip':'AI学习笔记.pdf';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+    toast('文件已生成，请保存后传到 iPad');
+  } finally {button.disabled=false;button.textContent=label;}
+}
+function batchAIModal() {
+  const pending=state.library.videos.filter(v=>platform(v.url)==='YouTube'&&(!v.summary||['failed','needs_content'].includes(v.automation?.status)));
+  if(!pending.length){toast('目前的视频已有笔记；可在视频详情中重新整理');return;}
+  showModal('让 AI 整理尚未完成的课程',`本次可将 ${Math.min(pending.length,20)} 条视频加入队列。系统依次读取字幕、分类、写笔记并保存；会使用当前模型额度。`, `<form>${actions('开始自动整理')}</form>`,async()=>{
+    let count=0;
+    for(const v of pending.slice(0,20)){const r=await post('/api/import',{url:v.url,retry:true});state.library=r.library;if(!r.duplicate)count++;}
+    renderAll();toast(`已安排 ${count} 条视频自动整理`);
+  });
+}
+
 function backupModal() {
-  showModal('让学习资料始终在手边', 'JSON 用于完整备份与恢复；Markdown 适合阅读，也可以放进 GitHub。', `<div class="backup-option"><div><h3>完整备份 · JSON</h3><p>包含分类、视频、状态和全部笔记。</p></div><button class="button small" data-action="export-json">导出 JSON</button></div><div class="backup-option"><div><h3>阅读版 · Markdown</h3><p>按分类生成视频目录和学习笔记。</p></div><button class="button small" data-action="export-markdown">导出笔记</button></div><div class="backup-option"><div><h3>从备份合并导入</h3><p>保留当前资料，重复链接保留当前版本。</p></div><button class="button small" data-action="import">选择 JSON</button></div><p class="modal-description">每次保存前还会自动保留一个本机备份，最近 30 份位于 data/.backups。备份仅保存在这台电脑，记得另存完整 JSON。</p><div class="modal-actions"><button class="button" data-action="close-modal">完成</button></div>`);
+  showModal('导出与备份', '个人学习文件请自行保管，导出不会上传到 GitHub。', `<div class="backup-option"><div><h3>iPad 无边记 · PDF 与图片</h3><p>AI 笔记带手写留白，图片可拖进无边记画布。</p></div><button class="button small primary" data-action="ipad-export">选择导出</button></div><div class="backup-option"><div><h3>完整备份 · JSON</h3><p>包含分类、视频、状态和全部笔记。</p></div><button class="button small" data-action="export-json">导出 JSON</button></div><div class="backup-option"><div><h3>阅读版 · Markdown</h3><p>按分类生成视频目录和学习笔记。</p></div><button class="button small" data-action="export-markdown">导出笔记</button></div><div class="backup-option"><div><h3>从备份合并导入</h3><p>保留当前资料，重复链接保留当前版本。</p></div><button class="button small" data-action="import">选择 JSON</button></div><p class="modal-description">每次保存前还会自动保留一个本机备份，最近 30 份位于 data/.backups。备份仅保存在这台电脑，记得另存完整 JSON。</p><div class="modal-actions"><button class="button" data-action="close-modal">完成</button></div>`);
 }
 function download(filename, content, mime) {
   const url = URL.createObjectURL(new Blob([content], {type:mime}));
@@ -312,7 +355,7 @@ function markdown() {
     for(const child of children(c.id)) addCategory(child,depth+1);
   }
   for(const c of children(null)) addCategory(c,2);
-  for(const item of state.library.insights || []) lines.push('## '+md(item.title),'',md(item.content),'',...item.sources.map(s=>`- [${md(s.source+' '+s.title)}](<${s.url.replace(/[<>\s]/g,encodeURIComponent)}>)`),'');
+  for(const item of state.library.insights || []) lines.push('## '+md(item.title),'',item.content,'',...item.sources.map(s=>`- [${md(s.source+' '+s.title)}](<${s.url.replace(/[<>\s]/g,encodeURIComponent)}>)`),'');
   return lines.join('\n');
 }
 function prepareImport(incoming) {
@@ -393,6 +436,9 @@ document.addEventListener('click', async event => {
       v.notes=v.notes.filter(n=>n.id!==id);v.updatedAt=now();await save(next);toast('笔记已移除');
     });
     else if(action==='backup') backupModal();
+    else if(action==='ipad-export') ipadExportModal(id || '');
+    else if(action==='download-study') await downloadStudy(button.dataset.kind,button.dataset.video || '',button);
+    else if(action==='batch-ai') batchAIModal();
     else if(action==='export-json') download(`study-atlas-${new Date().toLocaleDateString('sv-SE')}.json`,JSON.stringify(state.library,null,2)+'\n','application/json;charset=utf-8');
     else if(action==='export-markdown') download('我的学习图谱.md',markdown(),'text/markdown;charset=utf-8');
     else if(action==='import') $('#import-file').click();
@@ -430,18 +476,18 @@ $('#import-file').addEventListener('change',async event=>{
 });
 window.addEventListener('hashchange',route);
 
-// AI 只生成草稿；是否把结果加入知识库，由你在预览中决定。
+// AI 默认自动保存，保留人工笔记与旧版总结。
 const post = (url, data={}) => request(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
 const hasMaterial = v => [(v.transcript||''),v.summary,...v.notes.map(n=>n.text)].join('\n').trim().length>=20;
 function insightCard(item) {
-  return `<article class="knowledge-card"><div class="small-label">AI 经验归纳 · ${esc(item.model)} · ${esc(item.createdAt.slice(0,10))}</div><h2>${esc(item.title)}</h2><div class="note-text">${esc(item.content)}</div><div class="source-list">${item.sources.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">[${esc(s.source)}] ${esc(s.title)} ↗</a>`).join('')}</div><button class="link-button" data-action="delete-insight" data-id="${esc(item.id)}">移除这篇归纳</button></article>`;
+  return `<article class="knowledge-card"><div class="small-label">AI 经验归纳 · ${esc(item.model)} · ${esc(item.createdAt.slice(0,10))}</div><h2>${esc(item.title)}</h2><div class="rich-notes">${renderMarkdown(item.content)}</div><div class="source-list">${item.sources.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">[${esc(s.source)}] ${esc(s.title)} ↗</a>`).join('')}</div><button class="link-button" data-action="delete-insight" data-id="${esc(item.id)}">移除这篇归纳</button></article>`;
 }
 function insightsPage() {
   const status=state.integrations;
   const connection=status?.ai.mode==='deepseek' ? 'DeepSeek API' : status?.harness.configured ? 'Harness · '+(status.harness.model.model || 'DeepSeek') : '尚未连接 AI';
-  return heading('CONNECT IDEAS, BUILD UNDERSTANDING','AI 总结与共通经验','从多条视频里寻找共同规律，也保留差异和适用条件。',`<button class="button" data-action="ai-settings">AI 连接设置</button><button class="button primary" data-action="synthesize">${icon('spark')}开始归纳</button>`)
-    + `<div class="notice">当前使用：${esc(connection)}。整理依据是你保存的字幕、总结与时间点笔记；生成结果会标注来源，核对后再保存。</div>`
-    + (state.aiJob ? '<div class="notice">正在整理所选资料，完成后可在这里查看草稿。</div>' : '')
+  return heading('连接知识 · 提炼经验','AI 总结与共通经验','从多条视频里寻找共同规律，也保留差异和适用条件。',`<button class="button" data-action="ai-settings">AI 连接设置</button><button class="button primary" data-action="synthesize">${icon('spark')}开始归纳</button>`)
+    + `<div class="notice">当前使用：${esc(connection)}。整理依据是你保存的字幕、总结与时间点笔记；生成结果标注来源并自动保存，你可以随时补充与修订。</div>`
+    + (state.aiJob ? '<div class="notice">正在整理所选资料，完成后自动保存。</div>' : '')
     + (state.aiDraft ? '<div class="panel"><h2>有一份待核对的 AI 草稿</h2><p class="metadata">先检查结论和来源，再加入知识库。</p><button class="button small soft" data-action="show-draft">查看草稿</button></div>' : '')
     + ((state.library.insights || []).length ? state.library.insights.slice().reverse().map(insightCard).join('') : empty('让不同视频里的知识连接起来','先为至少两条视频保存字幕或笔记，再选中它们归纳共通经验。','<button class="button soft" data-action="navigate" data-view="videos">去整理视频资料</button>'));
 }
@@ -456,7 +502,7 @@ function harnessConnectModal() {
 function synthesisModal() {
   const available=state.view==='category'?categoryVideos(state.id):state.library.videos;
   if(!available.length) {toast('先在分类里收藏视频并保存资料');return;}
-  showModal('寻找这些视频的共通经验','每次选择 2 到 12 条有字幕或笔记的视频。AI 会比较共同点、差异、适用条件与可复用步骤。',`<form><label class="field"><span>这次想归纳什么？</span><input name="title" maxlength="300" value="${esc(state.view==='category'?category(state.id).name+' · 共通经验':'我的学习共通经验')}"></label><div class="source-picker">${available.map(v=>`<label class="source-choice"><input type="checkbox" name="videos" value="${esc(v.id)}"${hasMaterial(v)?' checked':' disabled'}><span>${esc(v.title)}<small>${esc(pathName(v.categoryId))} · ${hasMaterial(v)?'已有学习资料':'请先补充字幕或笔记'}</small></span></label>`).join('')}</div>${actions('让 AI 比较与归纳')}</form>`,async form=>{
+  showModal('寻找这些视频的共通经验','每次选择 2 到 12 条有字幕或笔记的视频。AI 会比较共同点、差异、适用条件与可复用步骤。',`<form><label class="field"><span>这次想归纳什么？</span><input name="title" maxlength="300" value="${esc(state.view==='category'?category(state.id).name+' · 共通经验':'我的学习共通经验')}"></label><div class="source-picker">${available.map(v=>`<label class="source-choice"><input type="checkbox" name="videos" value="${esc(v.id)}"${hasMaterial(v)?' checked':' disabled'}><span>${esc(displayTitle(v))}<small>${esc(pathName(v.categoryId))} · ${hasMaterial(v)?'已有学习资料':'请先补充字幕或笔记'}</small></span></label>`).join('')}</div>${actions('让 AI 比较与归纳')}</form>`,async form=>{
     const ids=form.getAll('videos');if(ids.length<2||ids.length>12) throw new Error('请选择 2 到 12 条视频');
     const title=form.get('title').trim() || '我的学习共通经验';
     // 先关闭选择窗口，生成状态在另一个窗口中显示。
@@ -466,33 +512,19 @@ function synthesisModal() {
 async function runAI(mode,videoIds,title='') {
   if(state.aiJob) {toast('正在整理，请等待当前任务结束');return;}
   state.aiJob={mode,videoIds,title};
-  showModal('AI 正在整理学习资料','已发送所选视频的字幕和笔记。可以关闭此窗口，结果会保留在“AI 总结与经验”的草稿中。','<div class="ai-working"><span class="spinner"></span><p>正在提取知识点、核对来源、组织笔记…</p></div>');
+  showModal('AI 正在整理，完成后自动保存','所选字幕与笔记会交给当前模型。即使关闭这个弹窗，后端完成后也会保存结果。','<div class="ai-working"><span class="spinner"></span><p>正在提取知识脉络、比较差异、归纳可复用经验…</p></div>');
   const indicator=modal.querySelector('.ai-working');
   try {
-    const result=await post('/api/ai/generate',{mode,videoIds});
-    state.aiDraft={...result,title:title || video(videoIds[0])?.title || 'AI 学习笔记',generatedAt:now()};
-    state.aiJob=null;renderAll();
-    if(modal.open&&modal.contains(indicator)) draftModal(); else toast('AI 草稿已完成，可在“AI 总结与经验”查看');
+    const result=await post('/api/ai/generate',{mode,videoIds,title:title || '我的学习共通经验'});
+    state.library=result.library;state.aiJob=null;renderAll();
+    if(modal.open&&modal.contains(indicator)) {
+      showModal('AI 笔记已自动保存','可以继续补充自己的理解，或导出到 iPad 无边记。',`<div class="rich-notes">${renderMarkdown(result.content)}</div><div class="modal-actions"><button class="button" data-action="close-modal">完成</button><button class="button primary" data-action="ipad-export">导出到无边记</button></div>`);
+    } else toast('AI 整理已完成并保存');
   } catch(error) {
     state.aiJob=null;renderAll();
     if(modal.open&&modal.contains(indicator)) showModal('这次整理尚未完成',error.message,'<div class="modal-actions"><button class="button" data-action="close-modal">关闭</button><button class="button soft" data-action="ai-settings">检查 AI 设置</button></div>');
     else toast(error.message,true);
   }
-}
-function draftModal() {
-  const draft=state.aiDraft;if(!draft) return;
-  showModal('AI 草稿 · 先核对，再保存',`${draft.model} · 请检查来源支持哪些结论；不确定的内容可以先保留为问题。`,`<form><label class="field"><span>标题</span><input name="title" required maxlength="300" value="${esc(draft.title.slice(0,300))}"></label><label class="field"><span>整理内容（可以修改）</span><textarea name="content" required maxlength="30000" rows="15">${esc(draft.content)}</textarea></label><div class="source-list">${draft.sources.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">[${esc(s.source)}] ${esc(s.title)} ↗</a>`).join('')}</div>${actions(draft.mode==='summary'?'加入视频总结':'保存为共通经验')}</form>`,async form=>{
-    const next=structuredClone(state.library),content=form.get('content').trim();
-    if(draft.mode==='summary') {
-      const target=next.videos.find(v=>v.id===draft.sourceIds[0]);if(!target) throw new Error('原视频已移除，请先复制草稿留存');
-      target.summary=[target.summary,`AI 学习笔记 · ${draft.model}\n${content}\n\n`+draft.sources.map(s=>`[${s.source}] ${s.title}\n${s.url}`).join('\n')].filter(Boolean).join('\n\n---\n\n');target.updatedAt=now();
-      if(target.summary.length>30000) throw new Error('现有总结加草稿超过 3 万字符，请缩短内容后保存');
-    } else {
-      next.insights ||= [];
-      next.insights.push({id:uid(),title:form.get('title').trim(),content,sources:draft.sources,model:draft.model,createdAt:draft.generatedAt});
-    }
-    await save(next);state.aiDraft=null;renderAll();toast('AI 整理结果已加入知识库');
-  });
 }
 
 async function youtubeModal() {
@@ -532,11 +564,13 @@ document.addEventListener('click',async event=>{
     else if(action==='harness-connect') harnessConnectModal();
     else if(action==='harness-check') {button.disabled=true;const info=await post('/api/integrations/harness/check');toast('连接正常：'+info.model.model);}
     else if(action==='ai-summary') {
-      if(!hasMaterial(video(id))) {toast('先读取或粘贴字幕并保存，AI 才有可靠资料可整理');return;}
-      await runAI('summary',[id]);
+      const v=video(id);
+      if(platform(v.url)==='YouTube') {const r=await post('/api/import',{url:v.url,retry:true});state.library=r.library;renderAll();toast('AI 已开始整理，完成后自动保存');}
+      else if(hasMaterial(v)) await runAI('summary',[id]);
+      else toast('这个来源还需要补充字幕或学习资料');
     }
     else if(action==='synthesize') synthesisModal();
-    else if(action==='show-draft') draftModal();
+    else if(action==='show-draft') toast('AI 结果已改为自动保存，请在学习笔记或共通经验中查看');
     else if(action==='fetch-transcript') {
       button.disabled=true;button.textContent='正在读取字幕…';
       const result=await post('/api/ai/transcript',{videoId:id});

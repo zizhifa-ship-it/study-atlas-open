@@ -16,6 +16,8 @@ from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
 from integrations import Integrations, IntegrationError
 from importer import AutoImporter
+from note_results import persist_generation
+from pdf_export import export_notes
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 4 * 1024 * 1024
@@ -137,6 +139,7 @@ def validate_library(payload):
         require(type(video.get("favorite", False)) is bool, "收藏状态格式不正确")
         clean_videos.append({
             "id": vid, "title": string(video.get("title"), "视频标题", 500),
+            "aiTitle": string(video.get("aiTitle", ""), "中文学习标题", 500, True),
             "url": url, "categoryId": category_id,
             "author": string(video.get("author", ""), "作者", 200, True),
             "durationSec": integer(video.get("durationSec", 0), "视频时长", 3600000),
@@ -233,7 +236,7 @@ def make_handler(store, integrations=None):
             safe = tuple(re.sub(r"(?i)(code|token|state|key)=([^&\s]+)", r"\1=[hidden]", str(a)) for a in args)
             super().log_message(message, *safe)
 
-        def respond(self, code, body, content_type="application/json; charset=utf-8"):
+        def respond(self, code, body, content_type="application/json; charset=utf-8", filename=None):
             if isinstance(body, (dict, list)):
                 body = json.dumps(body, ensure_ascii=False).encode("utf-8")
             elif isinstance(body, str):
@@ -241,6 +244,9 @@ def make_handler(store, integrations=None):
             self.send_response(code)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
+            if filename:
+                from urllib.parse import quote
+                self.send_header("Content-Disposition", "attachment; filename*=UTF-8" + chr(39) * 2 + quote(filename))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
@@ -289,6 +295,14 @@ def make_handler(store, integrations=None):
                     self.respond(200, result)
                 except IntegrationError as exc:
                     self.respond(400, {"error": str(exc)})
+            elif path == "/api/export":
+                query = parse_qs(urlsplit(self.path).query)
+                try:
+                    kind = query.get("format", ["pdf"])[0]
+                    result = export_notes(store.read(), query.get("videoId", [""])[0], kind)
+                    self.respond(200, result, "application/zip" if kind == "freeform" else "application/pdf", "无边记学习素材.zip" if kind == "freeform" else "AI学习笔记.pdf")
+                except IntegrationError as exc:
+                    self.respond(400, {"error": str(exc)})
             elif path == "/api/library":
                 try:
                     self.respond(200, store.read())
@@ -327,7 +341,10 @@ def make_handler(store, integrations=None):
                 elif path == "/api/integrations/ai":
                     result = integrations.save_ai(data)
                 elif path == "/api/ai/generate":
-                    result = integrations.generate(data, store.read())
+                    original = store.read()
+                    result = integrations.generate(data, original)
+                    if data.get("save", True) is not False:
+                        result = persist_generation(store, data, result, original)
                 elif path == "/api/ai/transcript":
                     target = next((v for v in store.read()["videos"] if v["id"] == data.get("videoId")), None)
                     require(target is not None, "视频不存在")

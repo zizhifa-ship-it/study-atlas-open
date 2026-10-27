@@ -1,0 +1,3 @@
+# Optional: only needed for PDF and Freeform image exports.
+reportlab>=4.4,<6
+pypdfium2>=4.30,<6

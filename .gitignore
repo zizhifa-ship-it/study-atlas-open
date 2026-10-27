@@ -22,3 +22,7 @@ node_modules/
 *.mov
 *.webm
 *.zip
+
+.venv/
+*.pdf
+无边记学习素材*/
