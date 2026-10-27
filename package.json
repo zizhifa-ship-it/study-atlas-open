@@ -1,0 +1,13 @@
+{
+  "name": "study-atlas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A local-first learning video library with AI notes and source-backed synthesis.",
+  "license": "MIT",
+  "scripts": {
+    "start": "python3 server.py --open",
+    "test": "python3 -m unittest discover -s tests -v",
+    "check": "node --check app.js"
+  }
+}

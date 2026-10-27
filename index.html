@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#214d3d">
+  <meta name="description" content="先分类，再收藏视频，最后把学到的知识写下来。你的个人视频学习知识库。">
+  <title>学习图谱 · Study Atlas</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" type="module"></script>
+</head>
+<body>
+  <a href="#content" class="skip-link">跳到主要内容</a>
+  <aside class="sidebar">
+    <a class="brand" href="#home"><img src="/favicon.svg" alt="" width="42" height="42"><span>学习图谱<small>STUDY ATLAS</small></span></a>
+    <div class="workspace"><span class="workspace-avatar">学</span><div>我的学习空间<small>一点一滴，连成体系</small></div><span class="local-dot" title="本地保存"></span></div>
+    <nav id="navigation" aria-label="知识库导航"></nav>
+    <div class="sidebar-foot"><span class="storage-indicator">资料保存在本机</span><p>每一次记录，都是下一次理解的起点。</p><button class="text-button" data-action="backup">导出与备份 <span>↗</span></button></div>
+  </aside>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="breadcrumb" id="breadcrumb">我的学习空间 / 分类总览</div>
+      <label class="search-box"><span aria-hidden="true">⌕</span><input id="search" type="search" autocomplete="off" placeholder="搜索分类、视频、标签或笔记…" aria-label="搜索知识库"><kbd>/</kbd></label>
+      <span class="avatar" title="个人学习空间">我</span>
+    </header>
+    <main id="content" tabindex="-1"><div class="empty-state">正在打开你的学习空间…</div></main>
+    <footer class="page-footer"><span>学习图谱 <span class="muted">/</span> 让收藏成为知识</span><span id="save-status" role="status">正在读取资料</span></footer>
+  </div>
+  <dialog id="modal" aria-labelledby="modal-title"></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <input type="file" id="import-file" accept="application/json,.json" hidden>
+  <input type="file" id="youtube-client-file" accept="application/json,.json" hidden>
+</body>
+</html>
