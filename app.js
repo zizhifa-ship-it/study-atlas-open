@@ -1,10 +1,13 @@
 import {knowledgePanel, mindmapSVG} from './knowledge.js';
+import {practicePage, practicePool, cardKey, mergePracticeAttempts} from './practice.js';
+import {libraryMarkdown} from './exports.js';
 // 阅读顺序：数据与请求 → 页面渲染 → 编辑窗口 → 用户操作。
 const $ = (selector) => document.querySelector(selector);
 const esc = (value = '') => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
-const state = {library: null, view: 'home', id: null, search: '', status: 'all', favorites: false, integrations:null, aiDraft:null, aiJob:null, knowledgeTabs:{}, compactMaps:{}};
+const state = {library: null, view: 'home', id: null, search: '', status: 'all', favorites: false, integrations:null, aiDraft:null, aiJob:null, knowledgeTabs:{}, compactMaps:{}, practiceData:null,
+  practice:{mode:'today',course:'',current:null,drafts:{},revealed:{},skipped:[],busy:null,pendingRequests:{}}};
 const statusNames = {todo: '待学习', learning: '学习中', done: '已学完'};
 const modal = $('#modal');
 let toastTimer;
@@ -44,6 +47,7 @@ async function save(next) {
   $('#save-status').textContent = '正在保存…';
   try {
     state.library = await request('/api/library', {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(next)});
+    await refreshPractice();
     state.dirty=false;renderAll();
   } catch (error) {
     $('#save-status').textContent = '保存失败，修改尚未写入';
@@ -125,7 +129,7 @@ function go(view, id = '') {
 }
 function route() {
   const [view, id] = location.hash.slice(1).split('/');
-  state.view = ['home','category','videos','notes','video','insights','knowledge'].includes(view) ? view : 'home';
+  state.view = ['home','category','videos','notes','video','insights','knowledge','practice'].includes(view) ? view : 'home';
   state.id = id ? decodeURIComponent(id) : null;
   if ((state.view === 'category' && !category(state.id)) || (state.view === 'video' && !video(state.id))) state.view = 'home';
   if (state.library) renderAll();
@@ -135,6 +139,7 @@ function renderNavigation() {
   const {videos} = state.library;
   let html = [['home','grid','分类总览',state.library.categories.length],['videos','play','全部视频',videos.length],['notes','note','学习笔记',noteCount(videos)],['knowledge','network','知识模块',state.library.videos.reduce((n,v)=>n+(v.knowledge?.modules.length || 0),0)],['insights','spark','AI 总结与经验',(state.library.insights || []).length]]
     .map(([view, symbol, name, count]) => `<button class="nav-item${state.view === view && !state.search ? ' active' : ''}" data-action="navigate" data-view="${view}">${icon(symbol)}${name}<span class="nav-count">${count}</span></button>`).join('');
+  html += `<button class="nav-item${state.view==='practice'?' active':''}" data-action="navigate" data-view="practice">${icon('book')}复习与自测<span class="nav-count">${(state.practiceData?.counts.due || 0)+(state.practiceData?.counts.new || 0)}</span></button>`;
   html += `<div class="nav-section-title">学习分类<button aria-label="新建分类" data-action="new-category">＋</button></div>`;
   function addCategories(parent, depth = 0) {
     for (const c of children(parent)) {
@@ -226,12 +231,17 @@ function renderMain() {
   else if (state.view === 'video') html = detailPage();
   else if (state.view === 'notes') html = notesPage();
   else if (state.view === 'knowledge') html = knowledgePage();
+  else if (state.view === 'practice') html = practicePage(state.practiceData,state.library,state.practice);
   else if (state.view === 'insights') html = insightsPage();
   else if (state.view === 'videos') html = heading('我的视频库','全部视频','收藏有价值的课程，按照自己的节奏学习。',addVideoButton) + videoSection(state.library.videos);
   else html = homePage();
   $('#content').innerHTML = html;
-  const name = state.search ? '搜索' : state.view === 'category' ? pathName(state.id) : state.view === 'video' ? pathName(video(state.id).categoryId) + ' / 视频笔记' : ({home:'分类总览',videos:'全部视频',notes:'学习笔记',insights:'AI 总结与经验',knowledge:'知识模块'}[state.view] || '分类总览');
+  const name = state.search ? '搜索' : state.view === 'category' ? pathName(state.id) : state.view === 'video' ? pathName(video(state.id).categoryId) + ' / 视频笔记' : ({home:'分类总览',videos:'全部视频',notes:'学习笔记',insights:'AI 总结与经验',knowledge:'知识模块',practice:'复习与自测'}[state.view] || '分类总览');
   $('#breadcrumb').innerHTML = '我的学习空间 <span class="muted">/</span> <strong>' + esc(name) + '</strong>';
+  if(state.view==='video' && state.pendingModule) {
+    document.getElementById('module-'+state.pendingModule)?.scrollIntoView({block:'start'});
+    state.pendingModule=null;
+  }
 }
 function renderAll() {
   renderNavigation(); renderMain();
@@ -347,29 +357,14 @@ function batchAIModal() {
 }
 
 function backupModal() {
-  showModal('导出与备份', '个人学习文件请自行保管，导出不会上传到 GitHub。', `<div class="backup-option"><div><h3>iPad 无边记 · PDF 与图片</h3><p>AI 笔记带手写留白，图片可拖进无边记画布。</p></div><button class="button small primary" data-action="ipad-export">选择导出</button></div><div class="backup-option"><div><h3>完整备份 · JSON</h3><p>包含分类、视频、状态和全部笔记。</p></div><button class="button small" data-action="export-json">导出 JSON</button></div><div class="backup-option"><div><h3>阅读版 · Markdown</h3><p>按分类生成视频目录和学习笔记。</p></div><button class="button small" data-action="export-markdown">导出笔记</button></div><div class="backup-option"><div><h3>从备份合并导入</h3><p>保留当前资料，重复链接保留当前版本。</p></div><button class="button small" data-action="import">选择 JSON</button></div><p class="modal-description">每次保存前还会自动保留一个本机备份，最近 30 份位于 data/.backups。备份仅保存在这台电脑，记得另存完整 JSON。</p><div class="modal-actions"><button class="button" data-action="close-modal">完成</button></div>`);
+  showModal('导出与备份', '个人学习文件请自行保管，导出不会上传到 GitHub。', `<div class="backup-option"><div><h3>iPad 无边记 · PDF 与图片</h3><p>AI 笔记带手写留白，图片可拖进无边记画布。</p></div><button class="button small primary" data-action="ipad-export">选择导出</button></div><div class="backup-option"><div><h3>完整备份 · JSON</h3><p>包含分类、视频、知识模块、全部笔记与自测记录。</p></div><button class="button small" data-action="export-json">导出 JSON</button></div><div class="backup-option"><div><h3>阅读版 · Markdown</h3><p>包含详尽模块、脑图大纲、自查与个人作答。</p></div><button class="button small" data-action="export-markdown">导出笔记</button></div><div class="backup-option"><div><h3>从备份合并导入</h3><p>保留当前资料，重复链接保留当前版本。</p></div><button class="button small" data-action="import">选择 JSON</button></div><p class="modal-description">每次保存前还会自动保留一个本机备份，最近 30 份位于 data/.backups。备份仅保存在这台电脑，记得另存完整 JSON。</p><div class="modal-actions"><button class="button" data-action="close-modal">完成</button></div>`);
 }
 function download(filename, content, mime) {
   const url = URL.createObjectURL(new Blob([content], {type:mime}));
   const a = document.createElement('a'); a.href=url; a.download=filename;
   document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),10000);
 }
-function markdown() {
-  const lines = ['# 我的学习图谱','','按“分类 → 视频 → 笔记”整理。',''];
-  const md = value => String(value).replace(/[\\`*_{}\[\]<>#|]/g,'\\$&');
-  function addCategory(c, depth) {
-    lines.push('#'.repeat(Math.min(depth,6))+' '+md(c.name),'',c.description ? md(c.description) : '', '');
-    for (const v of state.library.videos.filter(v=>v.categoryId === c.id)) {
-      lines.push(`### [${md(v.title)}](<${v.url.replace(/[<>\s]/g,encodeURIComponent)}>)`,'',`- 作者：${md(v.author || '未填写')}`,`- 状态：${statusNames[v.status]}`,`- 标签：${v.tags.map(md).join('、') || '无'}`,'');
-      if(v.summary) lines.push('**知识总结**','',md(v.summary),'');
-      for(const n of v.notes) lines.push(`**${timeLabel(n.timeSec)}**`,'',md(n.text),'');
-    }
-    for(const child of children(c.id)) addCategory(child,depth+1);
-  }
-  for(const c of children(null)) addCategory(c,2);
-  for(const item of state.library.insights || []) lines.push('## '+md(item.title),'',item.content,'',...item.sources.map(s=>`- [${md(s.source+' '+s.title)}](<${s.url.replace(/[<>\s]/g,encodeURIComponent)}>)`),'');
-  return lines.join('\n');
-}
+function markdown() { return libraryMarkdown(state.library); }
 function prepareImport(incoming) {
   if (incoming?.schemaVersion !== 1 || !Array.isArray(incoming.categories) || !Array.isArray(incoming.videos) || incoming.categories.length > 1000 || incoming.videos.length > 10000) throw new Error('请选择学习图谱导出的 JSON 备份');
   const next = structuredClone(state.library), ids = new Map(), visiting = new Set();
@@ -405,6 +400,7 @@ function prepareImport(incoming) {
     if(next.insights.some(x=>x.title===item.title&&x.content===item.content)) continue;
     next.insights.push({...item,id:uid(),sources:(item.sources || []).map(s=>({...s,videoId:videoIds.get(s.videoId)||s.videoId}))});
   }
+  next.learning=mergePracticeAttempts(next.learning,incoming.learning,videoIds);
   return {next,added,skipped,categories:next.categories.length-state.library.categories.length};
 }
 
@@ -619,7 +615,64 @@ $('#youtube-client-file').addEventListener('change',async event=>{
   catch(error) {toast(error instanceof SyntaxError?'这个文件不是有效的 OAuth JSON':error.message,true);}
 });
 
-try {state.library=await request('/api/library');await refreshIntegrations().catch(()=>{});route();}
+async function refreshPractice() {
+  try {state.practiceData=await request('/api/learning');state.practice.error='';}
+  catch(error) {state.practice.error=error.message;}
+  return state.practiceData;
+}
+
+document.addEventListener('click',async event=>{
+  const button=event.target.closest('[data-action]');if(!button || button.disabled) return;
+  const {action,key,mode,id}=button.dataset,ui=state.practice;
+  if(!action.startsWith('practice-')) return;
+  try {
+    if(action==='practice-mode') {ui.mode=mode;ui.current=null;ui.skipped=[];renderMain();}
+    else if(action==='practice-question') {ui.current=key;renderMain();}
+    else if(action==='practice-reference') {ui.revealed[key]=true;renderMain();}
+    else if(action==='practice-next') {ui.skipped.push(key);ui.current=null;state.dirty=false;renderMain();}
+    else if(action==='practice-reset-session') {ui.skipped=[];ui.current=null;renderMain();}
+    else if(action==='practice-refresh') {await refreshPractice();renderAll();}
+    else if(action==='practice-start') {
+      await refreshPractice();ui.course=id;ui.mode='all';ui.skipped=[];
+      const first=state.practiceData?.items.find(c=>c.videoId===id && (!button.dataset.module || c.moduleId===button.dataset.module));
+      ui.current=first ? cardKey(first) : null;go('practice');
+    }
+    else if(action==='practice-source') {
+      state.pendingModule=button.dataset.module;
+      state.knowledgeTabs[button.dataset.video]='details';go('video',button.dataset.video);
+    }
+  } catch(error) {toast(error.message,true);}
+});
+
+document.addEventListener('input',event=>{
+  const form=event.target.closest('#practice-form');
+  if(form && event.target.name==='answer') state.practice.drafts[form.dataset.key]=event.target.value;
+});
+document.addEventListener('change',event=>{
+  if(event.target.id==='practice-course') {
+    state.practice.course=event.target.value;state.practice.current=null;state.practice.skipped=[];renderMain();
+  }
+});
+document.addEventListener('submit',async event=>{
+  if(event.target.id!=='practice-form') return;
+  event.preventDefault();const ui=state.practice;if(ui.busy) return;
+  const key=event.target.dataset.key,card=state.practiceData.items.find(c=>cardKey(c)===key);
+  if(!card) {toast('题目已更新，请刷新后重试',true);return;}
+  const answer=new FormData(event.target).get('answer').trim();if(!answer) return;
+  const assisted=!!ui.revealed[key],old=ui.pendingRequests[key];
+  const pending=old?.answer===answer && old.assisted===assisted ? old : {id:uid(),answer,assisted};
+  ui.pendingRequests[key]=pending;ui.drafts[key]=answer;ui.current=key;ui.busy=key;renderMain();
+  try {
+    const result=await post('/api/learning/grade',{requestId:pending.id,videoId:card.videoId,questionId:card.questionId,answer,assisted});
+    state.practiceData=result.practice;state.library=await request('/api/library');
+    delete ui.drafts[key];delete ui.pendingRequests[key];ui.revealed[key]=true;
+    if(state.view==='practice')state.dirty=false;
+    toast('AI 反馈和下次复习时间已保存');
+  } catch(error) {toast(error.message,true);}
+  finally {ui.busy=null;renderNavigation();if(state.view==='practice')renderMain();}
+});
+
+try {state.library=await request('/api/library');await refreshIntegrations().catch(()=>{});await refreshPractice();route();}
 catch(error) {
   $('#content').innerHTML=empty('暂时打不开学习资料',esc(error.message)+'。请确认启动窗口仍在运行，然后刷新页面。');
   $('#save-status').textContent='尚未连接';
@@ -627,11 +680,11 @@ catch(error) {
 
 // 只在不编辑内容时刷新，避免后台整理打断尚未保存的笔记。
 setInterval(async () => {
-  if (!state.library || state.dirty || modal.open || document.activeElement?.matches('input,textarea,select') || document.hidden) return;
+  if (!state.library || state.dirty || state.practice.busy || modal.open || document.activeElement?.matches('input,textarea,select') || document.hidden) return;
   try {
     const latest=await request('/api/library');
     if (latest.revision !== state.library.revision) {
-      state.library=latest;route();
+      state.library=latest;await refreshPractice();route();
     }
   } catch { /* 暂时断开时保留当前页面与未提交数据。 */ }
 }, 4000);
