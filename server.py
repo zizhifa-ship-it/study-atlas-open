@@ -19,6 +19,7 @@ from importer import AutoImporter
 from note_results import persist_generation
 from pdf_export import export_notes
 from knowledge import validate_knowledge
+from practice import validate_learning, practice_overview, grade_answer
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 4 * 1024 * 1024
@@ -180,7 +181,8 @@ def validate_library(payload):
                                "model": string(item.get("model", ""), "模型", 200, True),
                                "createdAt": string(item.get("createdAt", ""), "生成时间", 50, True)})
     return {"schemaVersion": 1, "revision": revision,
-            "categories": clean_categories, "videos": clean_videos, "insights": clean_insights}
+            "categories": clean_categories, "videos": clean_videos, "insights": clean_insights,
+            "learning": validate_learning(payload.get("learning"))}
 
 
 class LibraryStore:
@@ -197,8 +199,11 @@ class LibraryStore:
 
     def save(self, payload):
         with self.lock:
-            clean = validate_library(payload)
             current = self.read()
+            # 旧页面或旧备份没有 learning 字段时，不清空新版本的练习记录。
+            if isinstance(payload, dict) and "learning" not in payload:
+                payload = dict(payload, learning=current["learning"])
+            clean = validate_library(payload)
             if clean["revision"] != current["revision"]:
                 raise ConflictError("数据已在另一个页面更新。请刷新后再修改；当前填写内容还在窗口中。")
             clean["revision"] += 1
@@ -308,14 +313,21 @@ def make_handler(store, integrations=None):
             elif path == "/api/library":
                 try:
                     self.respond(200, store.read())
-                except (OSError, ValueError):
+                except (OSError, ValueError, IntegrationError):
                     self.respond(500, {"error": "无法读取资料，请检查数据文件或恢复备份"})
+            elif path == "/api/learning":
+                try:
+                    self.respond(200, practice_overview(store.read()))
+                except (OSError, ValueError, IntegrationError):
+                    self.respond(500, {"error": "无法读取复习记录，请检查数据或恢复备份"})
             else:
                 assets = {"/": ("index.html", "text/html; charset=utf-8"),
                           "/index.html": ("index.html", "text/html; charset=utf-8"),
                           "/styles.css": ("styles.css", "text/css; charset=utf-8"),
                           "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                           "/knowledge.js": ("knowledge.js", "text/javascript; charset=utf-8"),
+                          "/practice.js": ("practice.js", "text/javascript; charset=utf-8"),
+                          "/exports.js": ("exports.js", "text/javascript; charset=utf-8"),
                           "/favicon.svg": ("favicon.svg", "image/svg+xml")}
                 if path not in assets:
                     self.respond(404, {"error": "页面不存在"})
@@ -339,6 +351,8 @@ def make_handler(store, integrations=None):
                     result = importer.submit(string(data.get("url"), "视频链接", 3000), data.get("retry") is True, data.get("detailed", True) is not False)
                 elif path == "/api/knowledge/build":
                     result = importer.submit_knowledge(string(data.get("videoId"), "视频编号", 100), data.get("reviewOnly") is True)
+                elif path == "/api/learning/grade":
+                    result = grade_answer(store, integrations, data)
                 elif path == "/api/integrations/harness/connect":
                     result = integrations.connect_harness(string(data.get("url"), "Harness 启动链接", 4000))
                 elif path == "/api/integrations/harness/check":
@@ -390,8 +404,8 @@ def make_handler(store, integrations=None):
                 self.respond(200, store.save(payload))
             except ConflictError as exc:
                 self.respond(409, {"error": str(exc)})
-            except (ValueError, TypeError, UnicodeError) as exc:
-                self.respond(400, {"error": str(exc) if isinstance(exc, ValidationError) else "JSON 数据格式不正确"})
+            except (ValueError, TypeError, UnicodeError, IntegrationError) as exc:
+                self.respond(400, {"error": str(exc) if isinstance(exc, (ValidationError, IntegrationError)) else "JSON 数据格式不正确"})
             except OSError:
                 self.respond(500, {"error": "保存失败，请检查文件权限或磁盘空间"})
 
