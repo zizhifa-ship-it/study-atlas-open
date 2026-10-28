@@ -2,12 +2,45 @@
   "schemaVersion": 1,
   "revision": 0,
   "categories": [
-    {"id":"network","name":"网络工程","parentId":null,"color":"green","description":"整理计算机网络课程与实践知识。"},
-    {"id":"network-basics","name":"网络基础","parentId":"network","color":"green","description":"IP、OSI 模型、网络协议与常用设备。"},
-    {"id":"programming","name":"编程基础","parentId":null,"color":"blue","description":"从第一行代码开始学习编程。"},
-    {"id":"ai","name":"人工智能","parentId":null,"color":"purple","description":"收集 AI 原理、工具与实践课程。"},
-    {"id":"english","name":"英语学习","parentId":null,"color":"orange","description":"积累听力、表达与专业英语资源。"}
+    {
+      "id": "network",
+      "name": "网络工程",
+      "parentId": null,
+      "color": "green",
+      "description": "整理计算机网络课程与实践知识。"
+    },
+    {
+      "id": "network-basics",
+      "name": "网络基础",
+      "parentId": "network",
+      "color": "green",
+      "description": "IP、OSI 模型、网络协议与常用设备。"
+    },
+    {
+      "id": "programming",
+      "name": "编程基础",
+      "parentId": null,
+      "color": "blue",
+      "description": "从第一行代码开始学习编程。"
+    },
+    {
+      "id": "ai",
+      "name": "人工智能",
+      "parentId": null,
+      "color": "purple",
+      "description": "收集 AI 原理、工具与实践课程。"
+    },
+    {
+      "id": "english",
+      "name": "英语学习",
+      "parentId": null,
+      "color": "orange",
+      "description": "积累听力、表达与专业英语资源。"
+    }
   ],
   "videos": [],
-  "insights": []
+  "insights": [],
+  "learning": {
+    "attempts": []
+  }
 }
