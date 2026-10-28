@@ -36,6 +36,7 @@ try {
   await mkdir(artifacts,{recursive:true});await page.screenshot({path:artifacts+'/desktop.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'手机布局不应横向溢出');
+  assert(await page.getByRole('button',{name:/复习与自测/}).evaluate(el=>el.getBoundingClientRect().height<70),'手机导航应保持横排可读');
   await page.screenshot({path:artifacts+'/mobile.png',fullPage:true});
   await page.getByRole('button',{name:'回到模块详解 →',exact:true}).click();
   await page.locator('#module-m1').waitFor();
