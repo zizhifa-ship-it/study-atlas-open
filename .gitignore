@@ -24,5 +24,6 @@ node_modules/
 *.zip
 
 .venv/
+.browser-test/
 *.pdf
 无边记学习素材*/
