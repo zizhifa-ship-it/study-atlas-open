@@ -8,6 +8,8 @@
   "scripts": {
     "start": "python3 server.py --open",
     "test": "python3 -m unittest discover -s tests -v",
-    "check": "node --check app.js"
+    "check": "node --check app.js && node --check knowledge.js && node --check practice.js && node --check exports.js",
+    "test:js": "node --test tests/*.test.mjs",
+    "test:browser": "node tests/browser_practice.mjs"
   }
 }
