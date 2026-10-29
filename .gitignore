@@ -27,3 +27,8 @@ node_modules/
 .browser-test/
 *.pdf
 无边记学习素材*/
+
+.venv-asr/
+*.mp3
+*.m4a
+*.wav
