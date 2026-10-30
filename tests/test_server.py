@@ -6,7 +6,8 @@ import threading
 import unittest
 from pathlib import Path
 from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from urllib.request import urlopen
+from http_helpers import authorized_request as Request
 
 from server import ConflictError, LibraryStore, ROOT, ValidationError, make_handler, validate_library, initialize_local_library
 from http.server import ThreadingHTTPServer
