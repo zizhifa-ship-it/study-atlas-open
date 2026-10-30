@@ -88,7 +88,9 @@ def frame_plan(root, video, duration):
     for segment in segments:
         offsets.append(position); position += len(norm(segment.get('text', '')))
     transcript = ''.join(norm(x.get('text', '')) for x in segments)
-    for m in (video.get('knowledge') or {}).get('modules', []):
+    modules = (video.get('knowledge') or {}).get('modules', [])
+    for index, m in enumerate(modules):
+        candidates = []
         for quote in m.get('evidence', []):
             quoted = norm(quote)
             found = transcript.find(quoted) if len(quoted) >= 12 else -1
@@ -96,7 +98,13 @@ def frame_plan(root, video, duration):
                 segment = segments[max(0, bisect.bisect_right(offsets, found) - 1)]
                 try: time = max(1, min(duration - 1, int(segment['start'])))
                 except (ValueError, KeyError, TypeError): continue
-                matches.append({'timeSec': time, 'label': m['title'], 'moduleId': m['id']}); break
+                candidates.append({'timeSec': time, 'label': m['title'], 'moduleId': m['id']})
+        if candidates:
+            # 模块可能引用前置概念；优先选接近该模块课程位置的原文，避免后面模块回跳到开场。
+            expected = duration * (index + .5) / len(modules)
+            matches.append(min(candidates, key=lambda f: abs(f['timeSec'] - expected)))
+    matches.sort(key=lambda f: f['timeSec'])
+    matches = list({f['timeSec']: f for f in matches}.values())
     if len(matches) >= 3: return [matches[0], matches[len(matches)//2], matches[-1]]
     return [{'timeSec': max(1, min(duration - 1, int(duration * ratio))), 'label': '视频画面 %d' % i, 'moduleId': ''} for i, ratio in enumerate([.2, .5, .8], 1)]
 
