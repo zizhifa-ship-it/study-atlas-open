@@ -20,6 +20,9 @@ from note_results import persist_generation
 from pdf_export import export_notes
 from knowledge import validate_knowledge
 from practice import validate_learning, practice_overview, grade_answer
+from note_layout import clean_cornell
+from video_media import validate_thumbnail, validate_visuals, ASSET
+from note_translations import validate_translations
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 4 * 1024 * 1024
@@ -155,6 +158,20 @@ def validate_library(payload):
             "createdAt": string(video.get("createdAt", ""), "创建时间", 50, True),
             "updatedAt": string(video.get("updatedAt", ""), "更新时间", 50, True)
         })
+        if video.get('thumbnail'):
+            clean_videos[-1]['thumbnail']=validate_thumbnail(video['thumbnail'])
+        if video.get('visuals') is not None:
+            clean_videos[-1]['visuals']=validate_visuals(video['visuals'])
+        if video.get('cornell') is not None:
+            clean_videos[-1]['cornell'] = clean_cornell(video['cornell'])
+        if video.get('transcriptInfo') is not None:
+            info = video['transcriptInfo']
+            require(isinstance(info, dict) and info.get('kind') in {'captions', 'asr', 'imported'}, '资料来源格式不正确')
+            clean_videos[-1]['transcriptInfo'] = {'kind': info['kind'], 'source': string(info.get('source'), '资料来源', 200),
+                'language': string(info.get('language', ''), '资料语言', 50, True),
+                'createdAt': string(info.get('createdAt', ''), '资料时间', 50, True)}
+        if video.get('translations') is not None:
+            clean_videos[-1]['translations'] = validate_translations(video['translations'], clean_videos[-1])
     insights = payload.get("insights", [])
     require(isinstance(insights, list) and len(insights) <= 3000, "经验归纳格式不正确或数量过多")
     clean_insights, insight_ids = [], set()
@@ -256,6 +273,7 @@ def make_handler(store, integrations=None):
                 self.send_header("Content-Disposition", "attachment; filename*=UTF-8" + chr(39) * 2 + quote(filename))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Cross-Origin-Resource-Policy", "same-origin")
             self.end_headers()
             self.wfile.write(body)
 
@@ -306,10 +324,20 @@ def make_handler(store, integrations=None):
                 query = parse_qs(urlsplit(self.path).query)
                 try:
                     kind = query.get("format", ["pdf"])[0]
-                    result = export_notes(store.read(), query.get("videoId", [""])[0], kind)
+                    result = export_notes(store.read(), query.get("videoId", [""])[0], kind, query.get('language', ['zh-CN'])[0])
                     self.respond(200, result, "application/zip" if kind == "freeform" else "application/pdf", "无边记学习素材.zip" if kind == "freeform" else "AI学习笔记.pdf")
                 except IntegrationError as exc:
                     self.respond(400, {"error": str(exc)})
+            elif path.startswith('/api/media/'):
+                if self.headers.get('Sec-Fetch-Site') == 'cross-site':
+                    self.respond(403, {'error':'只允许从本机知识库读取画面'})
+                    return
+                name=path.removeprefix('/api/media/')
+                target=integrations.root/'.local/media'/name if ASSET.fullmatch(name) else None
+                if not target or not target.is_file() or target.is_symlink():
+                    self.respond(404,{'error':'画面尚未保存，可重新生成图文导学'})
+                else:
+                    self.respond(200,target.read_bytes(),{'jpg':'image/jpeg','png':'image/png','webp':'image/webp'}[target.suffix[1:]])
             elif path == "/api/library":
                 try:
                     self.respond(200, store.read())
@@ -328,6 +356,9 @@ def make_handler(store, integrations=None):
                           "/knowledge.js": ("knowledge.js", "text/javascript; charset=utf-8"),
                           "/practice.js": ("practice.js", "text/javascript; charset=utf-8"),
                           "/exports.js": ("exports.js", "text/javascript; charset=utf-8"),
+                          "/cornell.js": ("cornell.js", "text/javascript; charset=utf-8"),
+                          "/translations.js": ("translations.js", "text/javascript; charset=utf-8"),
+                          "/video-media.js": ("video-media.js", "text/javascript; charset=utf-8"),
                           "/favicon.svg": ("favicon.svg", "image/svg+xml")}
                 if path not in assets:
                     self.respond(404, {"error": "页面不存在"})
@@ -351,6 +382,12 @@ def make_handler(store, integrations=None):
                     result = importer.submit(string(data.get("url"), "视频链接", 3000), data.get("retry") is True, data.get("detailed", True) is not False)
                 elif path == "/api/knowledge/build":
                     result = importer.submit_knowledge(string(data.get("videoId"), "视频编号", 100), data.get("reviewOnly") is True)
+                elif path == '/api/knowledge/format':
+                    result = importer.submit_format(string(data.get('videoId'), '视频编号', 100))
+                elif path == '/api/media/build':
+                    result = importer.submit_visuals(string(data.get('videoId'), '视频编号', 100))
+                elif path == '/api/notes/translate':
+                    result = importer.submit_translation(string(data.get('videoId'), '视频编号', 100), string(data.get('language'), '目标语言', 20))
                 elif path == "/api/learning/grade":
                     result = grade_answer(store, integrations, data)
                 elif path == "/api/integrations/harness/connect":
@@ -368,6 +405,28 @@ def make_handler(store, integrations=None):
                     target = next((v for v in store.read()["videos"] if v["id"] == data.get("videoId")), None)
                     require(target is not None, "视频不存在")
                     result = integrations.transcript(target["url"])
+                elif path == '/api/material/import':
+                    from transcript_sources import parse_transcript
+                    vid = string(data.get('videoId'), '视频编号', 100)
+                    filename = string(data.get('filename', 'transcript.txt'), '文件名', 200)
+                    raw = string(data.get('content'), '字幕或转录', 200000)
+                    transcript = parse_transcript(raw, Path(filename).suffix)
+                    with store.lock:
+                        latest = store.read(); target = next((v for v in latest['videos'] if v['id'] == vid), None)
+                        require(target is not None, '视频不存在')
+                        target['transcript'] = transcript
+                        target['transcriptInfo'] = {'kind': 'imported', 'source': '导入的字幕或转录文件', 'language': '', 'createdAt': datetime.now(timezone.utc).isoformat()}
+                        saved = store.save(latest)
+                    if data.get('generate', True) is not False:
+                        try:
+                            from video_sources import canonical_video_url
+                            canonical_video_url(target['url'])
+                        except IntegrationError:
+                            result = importer.submit_knowledge(vid)
+                        else:
+                            result = importer.submit(target['url'], True, True)
+                    else:
+                        result = {'library': saved, 'videoId': vid}
                 elif path == "/api/youtube/client":
                     result = integrations.save_youtube_client(data)
                 elif path == "/api/youtube/auth-url":
