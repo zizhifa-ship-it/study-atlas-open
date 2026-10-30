@@ -79,6 +79,15 @@ class MediaTests(unittest.TestCase):
    with patch('video_media.cache_cover',return_value='a'*64+'.jpg'):
     result=build_visuals(store,ai,'v1',lambda m:None)
    saved=result['videos'][0];self.assertEqual(saved['summary'],before['summary']);self.assertEqual(saved['knowledge'],before['knowledge']);self.assertEqual(saved['visuals']['status'],'partial')
+ def test_later_module_uses_later_quote_and_gallery_stays_chronological(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);folder=root/'.local/transcripts';folder.mkdir(parents=True)
+   quotes=['opening-quote-original','middle-quote-original','ending-quote-original']
+   (folder/'abcdefghijk.json').write_text(json.dumps({'segments':[{'start':t,'text':q} for t,q in zip([10,100,180],quotes)]}))
+   video={'url':'https://www.youtube.com/watch?v=abcdefghijk','knowledge':{'modules':[{'id':'m'+str(i),'title':'模块'+str(i),'evidence':[quotes[0],quotes[i]]} for i in range(3)]}}
+   actual=frame_plan(root,video,200)
+   self.assertEqual([x['timeSec'] for x in actual],[10,100,180])
+   self.assertEqual(actual[-1]['moduleId'],'m2')
  def test_local_media_route_blocks_path_traversal_and_foreign_page(self):
   with tempfile.TemporaryDirectory() as tmp:
    root=Path(tmp);path=root/'library.json';path.write_text(json.dumps(fixture()));store=LibraryStore(path);ai=Integrations(root)
