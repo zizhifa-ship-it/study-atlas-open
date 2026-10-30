@@ -11,32 +11,38 @@ import zipfile
 from html import escape
 from pathlib import Path
 from integrations import IntegrationError
+from note_layout import legacy_cornell
+from note_translations import localized_video
 
 EXPORT_LOCK = threading.Lock()
 
 
-def select_notes(library, video_id=""):
+def select_notes(library, video_id="", language='zh-CN'):
     videos = [v for v in library["videos"] if not video_id or v["id"] == video_id]
     if video_id and not videos:
         raise IntegrationError("没有找到这个视频")
     selected = [v for v in videos if v.get("summary") or v.get("notes") or v.get("knowledge")]
+    if language != 'zh-CN':
+        if not video_id: raise IntegrationError('其他语言笔记请按课程分别导出')
+        selected = [localized_video(v, language) for v in selected]
     insights = library.get("insights", []) if not video_id else []
     if not selected and not insights:
         raise IntegrationError("还没有可导出的笔记，请先让 AI 整理视频")
     if len(selected) > 30 or len(insights) > 30:
         raise IntegrationError("一次最多导出 30 条视频和 30 篇归纳，请按课程分别导出")
-    return {"videos": [{k: v.get(k, "") for k in ["id", "title", "aiTitle", "author", "url", "categoryId", "summary", "notes", "knowledge"]} for v in selected],
+    return {"videos": [{k: v.get(k, "") for k in ["id", "title", "aiTitle", "author", "url", "categoryId", "summary", "notes", "knowledge", "cornell", "transcriptInfo", "visuals"]} for v in selected],
             "categories": library["categories"], "insights": insights}
 
 
-def export_notes(library, video_id="", kind="pdf"):
+def export_notes(library, video_id="", kind="pdf", language='zh-CN'):
     if kind not in {"pdf", "freeform"}:
         raise IntegrationError("导出格式不支持")
-    payload = select_notes(library, video_id)
+    payload = select_notes(library, video_id, language)
     if not EXPORT_LOCK.acquire(blocking=False):
         raise IntegrationError("正在准备另一份笔记文件，请稍后再试")
     try:
         root = Path(__file__).resolve().parent
+        payload["mediaRoot"] = str(root / ".local/media")
         candidates = [root / ".venv/bin/python", Path(sys.executable),
                       Path.home() / ".cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3"]
         configured = os.environ.get("STUDY_ATLAS_PDF_PYTHON")
@@ -71,7 +77,7 @@ def make_pdf(payload):
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, PageBreak, NextPageTemplate, KeepTogether, Flowable
+    from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, PageBreak, NextPageTemplate, KeepTogether, Flowable, Table, TableStyle, Image
 
     fonts = [os.environ.get("STUDY_ATLAS_PDF_FONT", ""), "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
              "/Library/Fonts/Arial Unicode.ttf", "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
@@ -88,14 +94,14 @@ def make_pdf(payload):
     result = io.BytesIO()
     doc = BaseDocTemplate(result, pagesize=A4, title="学习图谱 · AI 学习笔记", author="学习图谱", leftMargin=left, rightMargin=38, topMargin=62, bottomMargin=46, pageCompression=1)
 
-    def decorate(canvas, document, writing=False):
+    def decorate(canvas, document, writing=False, cornell=False):
         canvas.saveState()
         canvas.setFont("StudyChinese", 10)
         canvas.setFillColor(green)
         canvas.drawString(left, height - 32, "学习图谱 / AI 学习笔记")
         canvas.setStrokeColor(colors.HexColor("#dbe4d6"))
         canvas.line(left, height - 42, width - 38, height - 42)
-        if not writing:
+        if not writing and not cornell:
             x, w = left + body_width + 16, width - 38 - (left + body_width + 16)
             canvas.setFillColor(colors.HexColor("#f4f6ee"))
             canvas.roundRect(x, bottom, w, top - bottom, 6, stroke=0, fill=1)
@@ -107,7 +113,7 @@ def make_pdf(payload):
             while y > bottom + 15:
                 canvas.line(x + 10, y, x + w - 10, y)
                 y -= 21
-        else:
+        elif writing:
             canvas.setStrokeColor(colors.HexColor("#e1e7d9"))
             y = top - 55
             while y > bottom + 16:
@@ -120,6 +126,7 @@ def make_pdf(payload):
         canvas.restoreState()
 
     doc.addPageTemplates([
+        PageTemplate(id="cornell", frames=[Frame(left, bottom, width - 76, top - bottom, leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)], onPage=lambda c, d: decorate(c, d, cornell=True)),
         PageTemplate(id="notes", frames=[Frame(left, bottom, body_width, top - bottom, leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)], onPage=decorate),
         PageTemplate(id="writing", frames=[Frame(left, bottom, width - 76, top - bottom, leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)], onPage=lambda c, d: decorate(c, d, True))])
     base = dict(fontName="StudyChinese", textColor=ink, wordWrap="CJK", splitLongWords=True, alignment=TA_LEFT)
@@ -129,6 +136,27 @@ def make_pdf(payload):
         "h2": ParagraphStyle("h2", fontSize=12, leading=20, spaceBefore=13, spaceAfter=7, keepWithNext=True, **base),
         "text": ParagraphStyle("text", fontSize=10.5, leading=19, spaceAfter=7, **base),
         "meta": ParagraphStyle("meta", fontSize=8.5, leading=14, spaceAfter=7, fontName="StudyChinese", textColor=muted, wordWrap="CJK", splitLongWords=True)}
+
+    def cornell_table(item, content):
+        layout = legacy_cornell(item)
+        cue = []
+        for i, question in enumerate(layout['cues'], 1):
+            cue.extend([Paragraph('%d. %s' % (i, rich(question)), styles['text']), Spacer(1, 15)])
+        cue.append(Paragraph('遮住右侧记录，只看提示复述。空白处可写自己的问题。', styles['meta']))
+        summary = [Paragraph('归纳小结', styles['h2']), Paragraph(rich(layout['summary']), styles['text'])]
+        table = Table([[Paragraph('提示与问题', styles['h2']), Paragraph('课堂记录', styles['h2'])],
+                       [cue, content or [Paragraph('资料不足，请补充课程内容。', styles['text'])]], [summary, '']],
+                      colWidths=[125, width - 201], repeatRows=1, splitByRow=1, splitInRow=1, hAlign='LEFT',
+                      style=TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),('BACKGROUND',(0,0),(-1,0),colors.HexColor('#ecf0df')),
+                                        ('BACKGROUND',(0,1),(0,1),colors.HexColor('#f5f7eb')),('BACKGROUND',(1,1),(1,1),colors.HexColor('#fffdf7')),
+                                        ('BACKGROUND',(0,2),(-1,2),colors.HexColor('#eef0df')),('SPAN',(0,2),(-1,2)),
+                                        ('BOX',(0,0),(-1,-1),0.7,colors.HexColor('#cad5bd')),
+                                        ('LINEAFTER',(0,0),(0,1),0.6,colors.HexColor('#cad5bd')),
+                                        ('LINEBELOW',(0,0),(-1,0),0.6,colors.HexColor('#cad5bd')),
+                                        ('LINEABOVE',(0,2),(-1,2),0.6,colors.HexColor('#cad5bd')),
+                                        ('LEFTPADDING',(0,0),(-1,-1),12),('RIGHTPADDING',(0,0),(-1,-1),12),
+                                        ('TOPPADDING',(0,0),(-1,-1),12),('BOTTOMPADDING',(0,0),(-1,-1),12)]))
+        return table
 
     def rich(text):
         text = escape(text, quote=False)
@@ -196,6 +224,17 @@ def make_pdf(payload):
                 for offset, concept in enumerate(module["concepts"][:6]):
                     label(concept["name"], x + 9, y - 31 - offset * 12, card_w - 18, 8, 1)
 
+    def picture(asset, caption):
+        from video_media import ASSET
+        if not isinstance(asset,str) or not ASSET.fullmatch(asset) or not payload.get('mediaRoot'): return
+        path=Path(payload['mediaRoot'])/asset
+        if not path.is_file() or path.is_symlink(): return
+        try:
+            item=Image(str(path));ratio=min((width-76)/item.imageWidth,230/item.imageHeight)
+            item.drawWidth=item.imageWidth*ratio;item.drawHeight=item.imageHeight*ratio
+            story.append(KeepTogether([item,Spacer(1,7),Paragraph(rich(caption),styles['meta']),Spacer(1,12)]))
+        except Exception: pass
+
     categories = {c["id"]: c for c in payload["categories"]}
     def category_name(cid):
         path, seen = [], set()
@@ -216,7 +255,20 @@ def make_pdf(payload):
         story.append(Paragraph('视频来源 [S1]：<a href="' + escape(video["url"], quote=True) + '">打开原视频</a>', styles["meta"]))
         if video.get("aiTitle") and video["aiTitle"] != video["title"]:
             story.append(Paragraph("原始标题：" + rich(video["title"]), styles["meta"]))
+        info = video.get('transcriptInfo') or {}
+        if info:
+            story.append(Paragraph('学习资料：' + rich(info.get('source', '')) + ' · ' + rich(info.get('language') or '语言未标注') + ('；语音转录可能包含识别误差' if info.get('kind') == 'asr' else ''), styles['meta']))
+        visuals=video.get('visuals') or {}
+        if visuals.get('cover') or visuals.get('frames'):
+            story.append(Paragraph('图文导学',styles['h1']))
+            picture(visuals.get('cover'),'原视频封面 · [S1]')
+            for f in visuals.get('frames',[]):
+                label=next((m['title'] for m in (video.get('knowledge') or {}).get('modules',[]) if m['id']==f.get('moduleId')),f['label'])
+                picture(f['asset'],'%d:%02d · %s · 原视频画面 [S1]'%(f['timeSec']//60,f['timeSec']%60,label))
+        start = len(story)
         paragraphs(video.get("summary", "") or "尚无总结，以下为已保存的补充笔记。")
+        content = story[start:]; del story[start:]
+        story.append(cornell_table(video, content))
         knowledge = video.get("knowledge")
         if knowledge:
             story.extend([PageBreak(), Paragraph("知识脑图", styles["title"]), Paragraph(rich(knowledge["overview"]), styles["meta"]), BrainDiagram(knowledge), PageBreak(), Paragraph("详尽知识模块", styles["title"])])
@@ -225,7 +277,17 @@ def make_pdf(payload):
                 story.append(Paragraph("学习目标：" + rich(module["objective"]), styles["meta"]))
                 if module["prerequisites"]:
                     story.append(Paragraph("前置知识：" + rich("、".join(module["prerequisites"])), styles["meta"]))
+                start = len(story)
                 paragraphs(module["notes"])
+                if module.get('procedure'):
+                    procedure = module['procedure']
+                    story.append(Paragraph('实验与操作流程', styles['h2']))
+                    paragraphs('目标：' + procedure['goal'])
+                    for condition in procedure['requirements']: paragraphs('条件：' + condition)
+                    for number, step in enumerate(procedure['steps'], 1):
+                        story.append(Paragraph('第 %d 步：%s' % (number, rich(step['action'])), styles['h2']))
+                        paragraphs('预期现象：' + step['expected']); paragraphs('验证方法：' + step['verify'])
+                    paragraphs('结果与边界：' + procedure['conclusion'])
                 for concept in module["concepts"]:
                     story.append(Paragraph("<b>" + rich(concept["name"]) + "：</b>" + rich(concept["explanation"]), styles["text"]))
                 if module["examples"]:
@@ -245,6 +307,8 @@ def make_pdf(payload):
                     story.append(Paragraph("依据摘录 [S1] · " + rich(knowledge["materialKind"]), styles["h2"]))
                     for text in module["evidence"]:
                         story.append(Paragraph(rich(text), styles["meta"]))
+                content = story[start:]; del story[start:]
+                story.append(cornell_table(module, content))
             story.extend([PageBreak(), Paragraph("AI 自查报告", styles["title"]), Paragraph(rich(knowledge["review"]["summary"]), styles["text"]), Paragraph("AI 自查不保证所有结论正确；摘录匹配只核对文字是否出现，请结合原课检查。", styles["meta"])])
             for issue in knowledge["review"]["issues"]:
                 story.append(Paragraph(("已修订" if issue["resolved"] else "待核对") + "：" + rich(issue["problem"]), styles["h2"]))
