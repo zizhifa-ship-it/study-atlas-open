@@ -8,7 +8,8 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import HTTPError
-from urllib.request import Request,urlopen
+from urllib.request import urlopen
+from http_helpers import authorized_request as Request
 from integrations import IntegrationError,Integrations
 from video_sources import canonical_video_url
 from bilibili_sources import canonical_bilibili,video_info,acquire_bilibili,ShareRedirects,subtitle_url
