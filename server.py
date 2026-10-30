@@ -7,6 +7,7 @@ import errno
 import json
 import os
 import re
+import secrets
 import tempfile
 import threading
 import webbrowser
@@ -23,6 +24,7 @@ from practice import validate_learning, practice_overview, grade_answer
 from note_layout import clean_cornell
 from video_media import validate_thumbnail, validate_visuals, ASSET
 from note_translations import validate_translations
+from security import SECURITY_HEADERS, RateLimiter, local_boundary, strict_json
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 4 * 1024 * 1024
@@ -226,6 +228,7 @@ class LibraryStore:
             clean["revision"] += 1
             backups = self.path.parent / ".backups"
             backups.mkdir(mode=0o700, exist_ok=True)
+            require(not backups.is_symlink(), '备份目录不能使用符号链接')
             stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
             backup_fd = os.open(str(backups / (stamp + ".json")), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(backup_fd, "w", encoding="utf-8") as backup:
@@ -252,12 +255,18 @@ class LibraryStore:
 def make_handler(store, integrations=None):
     integrations = integrations or Integrations(store.path.parent / "test-integrations")
     importer = AutoImporter(store, integrations)
+    security_token, limiter = secrets.token_hex(32), RateLimiter()
     class Handler(BaseHTTPRequestHandler):
         server_version = "StudyAtlas/1.0"
+        sys_version = ''
+
+        def setup(self):
+            super().setup()
+            self.connection.settimeout(15)
 
         def log_message(self, message, *args):
             # OAuth 回调参数不进入终端日志。
-            safe = tuple(re.sub(r"(?i)(code|token|state|key)=([^&\s]+)", r"\1=[hidden]", str(a)) for a in args)
+            safe = tuple(re.sub(r'[\x00-\x1f\x7f-\x9f]', '?', re.sub(r'\?\S+', '?[hidden]', str(a)))[:1000] for a in args)
             super().log_message(message, *safe)
 
         def respond(self, code, body, content_type="application/json; charset=utf-8", filename=None):
@@ -274,21 +283,38 @@ def make_handler(store, integrations=None):
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+            for name, value in SECURITY_HEADERS.items(): self.send_header(name, value)
+            if code == 429: self.send_header('Retry-After', '60')
             self.end_headers()
             self.wfile.write(body)
 
         def local_request(self):
-            host = self.headers.get("Host", "")
-            allowed = {"127.0.0.1:" + str(self.server.server_port),
-                       "localhost:" + str(self.server.server_port)}
-            if host not in allowed:
-                self.respond(403, {"error": "请通过本机地址访问"})
+            try:
+                if len(self.path) > 8192: raise ValueError()
+                path = urlsplit(self.path).path
+            except ValueError:
+                self.respond(400, {'error':'请求地址不正确'}); return False
+            if not local_boundary(self.headers, self.server.server_port, self.command, path):
+                self.respond(403, {"error": "只接受当前本机知识库页面的请求"})
                 return False
-            origin = self.headers.get("Origin")
-            if origin and origin not in {"http://" + h for h in allowed}:
-                self.respond(403, {"error": "不接受其他网站发起的写入"})
-                return False
+            if self.command in {'POST','PUT'}:
+                values = self.headers.get_all('X-Study-Atlas-Token', [])
+                if len(values) != 1 or not re.fullmatch(r'[a-f0-9]{64}', values[0]) or not secrets.compare_digest(values[0], security_token):
+                    self.respond(403, {'error':'安全连接已更新，请刷新后重试','code':'security_token'}); return False
+                costly = self.command == 'POST' and path not in {'/api/integrations/ai','/api/youtube/client','/api/youtube/disconnect'}
+                if not limiter.allow('ai' if costly else 'write', 30 if costly else 180):
+                    self.respond(429, {'error':'请求较频繁，请稍后重试'}); return False
+            if path == '/api/export' and not limiter.allow('export', 6):
+                self.respond(429, {'error':'导出较频繁，请稍后再试'}); return False
             return True
+
+        def read_json_body(self):
+            lengths = self.headers.get_all('Content-Length', [])
+            require(len(lengths) == 1 and lengths[0].isdigit() and not self.headers.get('Transfer-Encoding'), '请求长度格式不正确')
+            length = int(lengths[0]); require(0 < length <= MAX_BODY, '请求内容为空或过大（最多 4 MB）')
+            raw = self.rfile.read(length)
+            require(len(raw) == length, '请求内容没有完整传输')
+            return strict_json(raw)
 
         def do_GET(self):
             if not self.local_request():
@@ -296,8 +322,10 @@ def make_handler(store, integrations=None):
             path = urlsplit(self.path).path
             if path == "/api/health":
                 self.respond(200, {"app": "study-atlas", "ok": True})
+            elif path == '/api/security':
+                self.respond(200, {'token':security_token})
             elif path == "/api/integrations/status":
-                self.respond(200, integrations.status())
+                self.respond(200, dict(integrations.status(), security={'mode':'local','requestToken':True,'originChecks':True,'contentPolicy':True,'rateLimits':True}))
             elif path == "/api/youtube/callback":
                 try:
                     integrations.youtube_callback(parse_qs(urlsplit(self.path).query))
@@ -353,6 +381,7 @@ def make_handler(store, integrations=None):
                           "/index.html": ("index.html", "text/html; charset=utf-8"),
                           "/styles.css": ("styles.css", "text/css; charset=utf-8"),
                           "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+                          "/api-client.js": ("api-client.js", "text/javascript; charset=utf-8"),
                           "/knowledge.js": ("knowledge.js", "text/javascript; charset=utf-8"),
                           "/practice.js": ("practice.js", "text/javascript; charset=utf-8"),
                           "/exports.js": ("exports.js", "text/javascript; charset=utf-8"),
@@ -373,9 +402,7 @@ def make_handler(store, integrations=None):
                 self.respond(415, {"error": "只接受 JSON 数据"})
                 return
             try:
-                length = int(self.headers.get("Content-Length", "0"))
-                require(0 < length <= MAX_BODY, "请求内容为空或过大")
-                data = json.loads(self.rfile.read(length).decode("utf-8"))
+                data = self.read_json_body()
                 require(isinstance(data, dict), "请求必须是 JSON 对象")
                 path = urlsplit(self.path).path
                 if path == "/api/import":
@@ -442,7 +469,7 @@ def make_handler(store, integrations=None):
                 self.respond(200, result)
             except (ValidationError, IntegrationError) as exc:
                 self.respond(400, {"error": str(exc)})
-            except (ValueError, TypeError, UnicodeError, KeyError):
+            except (ValueError, TypeError, UnicodeError, KeyError, RecursionError):
                 self.respond(400, {"error": "请求或服务响应格式不正确"})
             except Exception:
                 self.respond(500, {"error": "连接服务时发生错误，请检查本机服务与设置后重试"})
@@ -457,13 +484,11 @@ def make_handler(store, integrations=None):
                 self.respond(415, {"error": "只接受 JSON 数据"})
                 return
             try:
-                length = int(self.headers.get("Content-Length", "0"))
-                require(0 < length <= MAX_BODY, "文件过大或内容为空（最多 4 MB）")
-                payload = json.loads(self.rfile.read(length).decode("utf-8"))
+                payload = self.read_json_body()
                 self.respond(200, store.save(payload))
             except ConflictError as exc:
                 self.respond(409, {"error": str(exc)})
-            except (ValueError, TypeError, UnicodeError, IntegrationError) as exc:
+            except (ValueError, TypeError, UnicodeError, IntegrationError, RecursionError) as exc:
                 self.respond(400, {"error": str(exc) if isinstance(exc, (ValidationError, IntegrationError)) else "JSON 数据格式不正确"})
             except OSError:
                 self.respond(500, {"error": "保存失败，请检查文件权限或磁盘空间"})
