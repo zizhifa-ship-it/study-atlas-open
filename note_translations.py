@@ -5,6 +5,7 @@ import json
 import re
 from datetime import datetime, timezone
 from integrations import IntegrationError
+from ai_efficiency import compact_json, validated_request, model_identity
 from note_layout import clean_cornell, legacy_cornell
 
 LANGUAGES = {'zh-CN': '简体中文', 'en': '英语', 'de': '德语', 'ja': '日语', 'ko': '韩语', 'fr': '法语', 'es': '西班牙语', 'ru': '俄语'}
@@ -66,7 +67,9 @@ def translate_notes(store, integrations, vid, language, progress):
     if existing and existing['sourceHash'] == fingerprint: return existing
     job_name = 'translate-' + hashlib.sha256((vid + language).encode()).hexdigest()[:24]
     job = integrations.read(job_name)
-    if job.get('sourceHash') != fingerprint: job = {'sourceHash': fingerprint, 'modules': []}
+    identity = hashlib.sha256(compact_json(model_identity(integrations)).encode()).hexdigest()
+    if job.get('sourceHash') != fingerprint or job.get('modelKey') != identity:
+        job = {'sourceHash': fingerprint, 'modelKey': identity, 'modules': []}
     if not integrations.lock.acquire(blocking=False): raise IntegrationError('其他 AI 任务正在运行，请稍后生成译文')
     try:
         generator = integrations.deepseek_generate if integrations.read('ai').get('mode', 'harness') == 'deepseek' else integrations.harness_generate
@@ -77,10 +80,14 @@ def translate_notes(store, integrations, vid, language, progress):
             progress('正在生成%s笔记概览与康奈尔提示' % LANGUAGES[language])
             header = {'title': original.get('aiTitle') or original['title'], 'summary': original.get('summary', ''),
                       'overview': (original.get('knowledge') or {}).get('overview', ''), 'cornell': legacy_cornell(original)}
-            translated = parse_json(generator(rules + '翻译下列对象的值，保持所有键与结构不变：\n' + json.dumps(header, ensure_ascii=False)))
-            job['header'] = {'title': txt(translated.get('title'), '译文标题', 500), 'summary': txt(translated.get('summary'), '译文正文', 30000, True),
-                             'overview': txt(translated.get('overview', ''), '译文概览', 3000, True), 'cornell': clean_cornell(translated.get('cornell'))}
-            if job['header']['cornell'] is None: raise IntegrationError('译文缺少康奈尔提示或小结')
+            def validate_header(response):
+                translated = parse_json(response)
+                result = {'title': txt(translated.get('title'), '译文标题', 500), 'summary': txt(translated.get('summary'), '译文正文', 30000, True),
+                          'overview': txt(translated.get('overview', ''), '译文概览', 3000, True), 'cornell': clean_cornell(translated.get('cornell'))}
+                if result['cornell'] is None: raise IntegrationError('译文缺少康奈尔提示或小结')
+                return result
+            job['header'] = validated_request(integrations, generator,
+                rules + '翻译下列对象的值，保持所有键与结构不变：\n' + compact_json(header), validate_header, 'translate-header:' + language)
             integrations.write(job_name, job)
         originals = (original.get('knowledge') or {}).get('modules', [])
         for index, module in enumerate(originals):
@@ -88,14 +95,18 @@ def translate_notes(store, integrations, vid, language, progress):
             progress('正在翻译为%s：第 %d/%d 个知识模块' % (LANGUAGES[language], index + 1, len(originals)))
             source = {k: copy.deepcopy(v) for k, v in module.items() if k not in {'evidence'}}
             source['cornell'] = legacy_cornell(module)
-            answer = parse_json(generator(rules + '原样保留 id，翻译所有笔记、概念、例子、复习问答、康奈尔提示和实验流程。只返回下列对象的译文：\n' + json.dumps(source, ensure_ascii=False)))
-            if answer.get('id') != module['id']: raise IntegrationError('译文改变了模块编号，已保留完成进度')
-            candidate = validate_module(dict(answer, evidence=module['evidence']))
-            for field in ['concepts', 'examples', 'pitfalls', 'questions']:
-                if len(candidate[field]) != len(module[field]): raise IntegrationError('译文省略了部分内容，已保留完成进度，请重试')
-            if candidate.get('cornell') is None: raise IntegrationError('模块译文缺少康奈尔结构')
-            if module.get('procedure') and (not candidate.get('procedure') or len(candidate['procedure']['steps']) != len(module['procedure']['steps'])):
-                raise IntegrationError('译文省略了实验步骤，已保留完成进度')
+            def validate_translation(response):
+                answer = parse_json(response)
+                if answer.get('id') != module['id']: raise IntegrationError('译文改变了模块编号，已保留完成进度')
+                candidate = validate_module(dict(answer, evidence=module['evidence']))
+                for field in ['concepts', 'examples', 'pitfalls', 'questions']:
+                    if len(candidate[field]) != len(module[field]): raise IntegrationError('译文省略了部分内容，已保留完成进度，请重试')
+                if candidate.get('cornell') is None: raise IntegrationError('模块译文缺少康奈尔结构')
+                if module.get('procedure') and (not candidate.get('procedure') or len(candidate['procedure']['steps']) != len(module['procedure']['steps'])):
+                    raise IntegrationError('译文省略了实验步骤，已保留完成进度')
+                return candidate
+            candidate = validated_request(integrations, generator,
+                rules + '原样保留 id，翻译所有笔记、概念、例子、复习问答、康奈尔提示和实验流程。只返回下列对象的译文：\n' + compact_json(source), validate_translation, 'translate-module:' + language)
             job['modules'].append(candidate); integrations.write(job_name, job)
         translated = {**job['header'], 'language': language, 'sourceHash': fingerprint, 'modules': job['modules'],
                       'createdAt': datetime.now(timezone.utc).isoformat(),
