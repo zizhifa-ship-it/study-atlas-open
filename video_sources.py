@@ -4,6 +4,10 @@ import re
 from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import Request, urlopen
 from integrations import IntegrationError
+from functools import partial
+from security import public_urlopen
+
+urlopen = partial(public_urlopen, domains=['youtube.com'])
 
 
 def extract_link(raw):
