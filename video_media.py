@@ -10,6 +10,10 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, urlopen
 from integrations import IntegrationError
+from functools import partial
+from security import public_urlopen
+
+urlopen = partial(public_urlopen, domains=['ytimg.com', 'youtube.com', 'hdslb.com'])
 
 ASSET = re.compile(r'^[a-f0-9]{64}\.(?:jpg|png|webp)$')
 
