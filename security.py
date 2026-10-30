@@ -32,10 +32,10 @@ def local_boundary(headers, port, method, path):
     hosts = headers.get_all('Host', [])
     if len(hosts) != 1 or hosts[0] not in {'127.0.0.1:' + str(port), 'localhost:' + str(port)}:
         return False
-    origins = headers.get_all('Origin', [])
-    if len(origins) > 1 or origins and origins[0] != 'http://' + hosts[0]: return False
-    site = headers.get('Sec-Fetch-Site', '')
     callback = path == '/api/youtube/callback' and method == 'GET' and headers.get('Sec-Fetch-Mode') == 'navigate' and headers.get('Sec-Fetch-Dest') == 'document'
+    origins = headers.get_all('Origin', [])
+    if len(origins) > 1 or origins and origins[0] != 'http://' + hosts[0] and not callback: return False
+    site = headers.get('Sec-Fetch-Site', '')
     if path.startswith('/api/') and site in {'cross-site', 'same-site'} and not callback: return False
     if method in {'POST', 'PUT'} and site not in {'', 'same-origin'}: return False
     return True
