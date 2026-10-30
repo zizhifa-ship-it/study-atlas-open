@@ -42,7 +42,7 @@ def parse_transcript(content, extension='txt'):
     if extension.lower().lstrip('.') in {'json3', 'json'}:
         try:
             data = json.loads(content)
-            raw = [s.get('utf8', '') for e in data.get('events', []) for s in e.get('segs', [])]
+            raw = [x.get('content', '') for x in data['body'] if isinstance(x, dict)] if isinstance(data.get('body'), list) else [s.get('utf8', '') for e in data.get('events', []) for s in e.get('segs', [])]
             content = '\n'.join(raw)
         except (ValueError, AttributeError, TypeError):
             raise IntegrationError('字幕 JSON 格式不正确')
@@ -199,7 +199,9 @@ def acquire_transcript(root, url, progress=None, allow_asr=True, force=False):
                 raw = response.read(4 * 1024 * 1024 + 1).decode('utf-8-sig')
             transcript = parse_transcript(raw, track['ext'])
             data = {'transcript': transcript, 'language': track['language'], 'source': 'YouTube 原语言字幕',
-                    'kind': 'captions', 'partial': False, 'languageFile': track['language'] + '.' + track['ext']}
+                    'kind': 'captions', 'partial': False, 'languageFile': track['language'] + '.' + track['ext'], 'durationSec': metadata.get('duration', 0)}
+            if track['ext']=='json3':
+                parsed=json.loads(raw);data['segments']=[{'start':e.get('tStartMs',0)/1000,'end':(e.get('tStartMs',0)+e.get('dDurationMs',0))/1000,'text':''.join(s.get('utf8','') for s in e.get('segs',[]))} for e in parsed.get('events',[]) if e.get('segs')]
             break
         except HTTPError as exc:
             if exc.code == 429:
