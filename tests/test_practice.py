@@ -6,7 +6,8 @@ import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.request import Request, urlopen
+from urllib.request import urlopen
+from http_helpers import authorized_request as Request
 from urllib.error import HTTPError
 from http.server import ThreadingHTTPServer
 from integrations import IntegrationError
