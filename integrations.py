@@ -18,6 +18,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import HTTPCookieProcessor, ProxyHandler, Request, build_opener, urlopen
 from ai_efficiency import compact_json, validated_request, efficiency_status, record_model_call
+from security import credential_urlopen as urlopen, NoRedirect, private_name
 
 
 class IntegrationError(ValueError):
@@ -51,15 +52,20 @@ class Integrations:
         self.root = Path(root)
         self.local = self.root / ".local"
         self.local.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if self.local.is_symlink(): raise IntegrationError('私有配置目录不能使用符号链接')
+        self.local.chmod(0o700)
         self.pending_oauth = {}
         self.lock = threading.Lock()
 
     def read(self, name):
-        path = self.local / (name + ".json")
+        path = self.local / (private_name(name) + ".json")
+        if path.is_symlink(): raise IntegrationError('私有配置不能使用符号链接')
+        if path.exists() and path.stat().st_size > 8 * 1024 * 1024: raise IntegrationError('私有配置过大')
         return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
     def write(self, name, data):
-        target = self.local / (name + ".json")
+        target = self.local / (private_name(name) + ".json")
+        if target.is_symlink(): raise IntegrationError('私有配置不能使用符号链接')
         fd, temp = tempfile.mkstemp(prefix=".settings-", dir=self.local)
         try:
             os.fchmod(fd, 0o600)
@@ -86,7 +92,7 @@ class Integrations:
                 domain_initial_dot=False, path=item["path"], path_specified=True,
                 secure=item.get("secure", False), expires=item.get("expires"), discard=False,
                 comment=None, comment_url=None, rest={}, rfc2109=False))
-        return build_opener(ProxyHandler({}), HTTPCookieProcessor(jar)), jar
+        return build_opener(ProxyHandler({}), HTTPCookieProcessor(jar), NoRedirect()), jar
 
     @staticmethod
     def rpc(config, method, args):
