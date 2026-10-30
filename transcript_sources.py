@@ -13,6 +13,10 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, urlopen
 from integrations import IntegrationError
+from functools import partial
+from security import public_urlopen
+
+urlopen = partial(public_urlopen, domains=['youtube.com', 'google.com'])
 
 MAX_TEXT = 200000
 
