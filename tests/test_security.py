@@ -73,7 +73,7 @@ class SecurityTests(unittest.TestCase):
             self.assertEqual(status,429);self.assertEqual(check.call_count,30);self.assertEqual(headers['Retry-After'],'60')
     def test_explicit_oauth_navigation_keeps_state_validation(self):
         with patch.object(self.ai,'youtube_callback',return_value={}) as callback:
-            status=self.request('GET','/api/youtube/callback?state=test',headers={'Sec-Fetch-Site':'cross-site','Sec-Fetch-Mode':'navigate','Sec-Fetch-Dest':'document'})[0]
+            status=self.request('GET','/api/youtube/callback?state=test',headers={'Origin':'https://accounts.google.com','Sec-Fetch-Site':'cross-site','Sec-Fetch-Mode':'navigate','Sec-Fetch-Dest':'document'})[0]
             self.assertEqual(status,200);callback.assert_called_once()
         self.assertEqual(self.request('GET','/api/youtube/callback?state=test',headers={'Sec-Fetch-Site':'cross-site','Sec-Fetch-Mode':'no-cors','Sec-Fetch-Dest':'image'})[0],403)
     def test_private_config_paths_and_symlinks_rejected(self):
