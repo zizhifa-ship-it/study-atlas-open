@@ -1,0 +1,35 @@
+// 完整笔记体验的隔离测试，使用模拟 AI，不读取真实账号、笔记或花费额度。
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const root=fileURLToPath(new URL('../',import.meta.url));
+const server=spawn(process.env.PYTHON_EXECUTABLE || 'python3',['tests/browser_fixture.py'],{cwd:root,stdio:['ignore','pipe','pipe']});
+server.stderr.on('data',chunk=>process.stderr.write(chunk));
+const base=await new Promise((resolve,reject)=>{let out='';const timer=setTimeout(()=>reject(Error('临时服务未启动')),10000);server.stdout.on('data',c=>{out+=c;const m=out.match(/TEST_URL=(http:\/\/127\.0\.0\.1:\d+)/);if(m){clearTimeout(timer);resolve(m[1]);}});server.on('exit',code=>{clearTimeout(timer);reject(Error('临时服务退出 '+code));});});
+let browser;
+try{
+ browser=await chromium.launch({headless:true,...(process.env.STUDY_ATLAS_TEST_BROWSER?{executablePath:process.env.STUDY_ATLAS_TEST_BROWSER}:{})});
+ const page=await browser.newPage({viewport:{width:1365,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(base+'/#video/v1');await page.getByLabel('选择笔记语言').waitFor();
+ assert.equal(await page.locator('.scene-gallery figure').count(),3);await page.waitForFunction(()=>Array.from(document.querySelectorAll('.visual-guide img')).every(img=>img.complete && img.naturalWidth>0));
+ assert.equal(await page.getByRole('tab',{name:/自查/}).count(),0);assert.equal(await page.locator('.import-panel').count(),0);
+ await page.getByLabel('选择笔记语言').selectOption('en');await page.getByRole('button',{name:'生成英语笔记',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('.note-language-status').textContent.includes('英语译文'));
+ assert((await page.locator('#module-m1').innerText()).includes('DHCP assigns IP addresses.'));
+ await page.getByRole('tab',{name:'知识脑图',exact:true}).click();assert((await page.locator('.mindmap-stage').innerText()).includes('Address allocation'));
+ await page.getByRole('tab',{name:'详尽笔记',exact:true}).click();
+ await page.getByText('对照中文原稿',{exact:true}).click();assert((await page.locator('.original-comparison').innerText()).includes('已有总结应保留'));
+ await page.getByLabel('选择笔记语言').selectOption('zh-CN');assert((await page.locator('#module-m1').innerText()).includes('DHCP'));
+ await page.getByRole('button',{name:'质量与来源',exact:true}).click();
+ assert.equal(await page.locator('.quality-course[open]').count(),0);await page.locator('.quality-course>summary').first().click();
+ await page.getByRole('button',{name:'再自查一次',exact:true}).waitFor();
+ await page.getByText('字幕与学习资料（通常由网站自动读取）',{exact:true}).click();
+ await page.locator('[data-transcript-form] textarea').fill('这是从文件导入的原始资料，足够用于课堂笔记整理与来源核对。');
+ await page.getByRole('button',{name:'保存学习资料',exact:true}).click();await page.getByText('学习资料已保存',{exact:true}).waitFor();
+ await page.reload();await page.locator('.quality-course>summary').first().click();await page.getByText('字幕与学习资料（通常由网站自动读取）',{exact:true}).click();
+ assert((await page.locator('[data-transcript-form] textarea').inputValue()).includes('从文件导入'));
+ await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+ assert.equal(errors.length,0,errors.join('\n'));
+ console.log('笔记端到端验证通过：语言选择 → AI 翻译 → 保存 → 脑图 → 中文对照 → 独立质量板块 → 资料编辑 → 刷新 → 手机布局。');
+}finally{await browser?.close();server.kill('SIGINT');}
