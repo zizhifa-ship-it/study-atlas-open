@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from integrations import IntegrationError
 
 
-def apply_ai_summary(target, content, model, previous_summary):
+def apply_ai_summary(target, content, model, previous_summary, cornell=None):
     stamp = datetime.now(timezone.utc).isoformat()
     content = content.strip()
     if not content or len(content) > 30000:
@@ -25,6 +25,11 @@ def apply_ai_summary(target, content, model, previous_summary):
         target.setdefault("notes", []).append({"id": uuid.uuid4().hex, "timeSec": None, "text": note, "createdAt": stamp})
     if current == previous_summary:
         target["summary"] = content
+        if cornell is not None:
+            from note_layout import clean_cornell
+            target['cornell'] = clean_cornell(cornell)
+        elif current != content:
+            target.pop('cornell', None)
     target["updatedAt"] = stamp
     return message
 
@@ -40,7 +45,9 @@ def persist_generation(store, request, result, original):
                 raise IntegrationError("视频已移除，生成结果没有写入原记录")
             if target["url"] != baseline["url"]:
                 raise IntegrationError("视频链接已修改，旧资料的生成结果未写入")
-            message = apply_ai_summary(target, result["content"], result.get("model", ""), baseline.get("summary", ""))
+            if target.get('transcript', '') != baseline.get('transcript', ''):
+                raise IntegrationError('生成期间原始资料已修改，旧结果未覆盖，请依据新资料重试')
+            message = apply_ai_summary(target, result["content"], result.get("model", ""), baseline.get("summary", ""), result.get('cornell'))
             target["automation"] = {"status": "ready", "message": message, "model": result.get("model", "")}
         else:
             sources = result["sources"]
