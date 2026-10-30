@@ -8,6 +8,10 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 from integrations import IntegrationError
+from functools import partial
+from security import public_urlopen
+
+urlopen = partial(public_urlopen, domains=['bilibili.com', 'hdslb.com'])
 
 HOSTS = {'bilibili.com', 'www.bilibili.com', 'm.bilibili.com', 'b23.tv', 'www.b23.tv'}
 HEADERS = {'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.bilibili.com/'}
