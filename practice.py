@@ -4,6 +4,7 @@ import json
 import re
 from datetime import datetime, timedelta, timezone
 from integrations import IntegrationError
+from ai_efficiency import compact_json
 from knowledge import parse_json
 
 MAX_ATTEMPTS = 10000
@@ -178,9 +179,9 @@ def grade_answer(store, integrations, request, clock=None):
                   '"feedback":"指出答对和有问题的具体表述，不超过350字", "missingPoints":["遗漏或混淆点"],'
                   '"suggestedAnswer":"根据资料给出简洁改写", "evidence":"从模块资料逐字摘录的一段依据，保留原语言，不翻译"}。'
                   'correct 对应80至100分，partial对应40至79分，incorrect对应0至39分，insufficient的score必须为null。'
-                  '看过参考答案时仍如实批改，但不要声称这是独立掌握的证明。资料：\n' + json.dumps({
+                  '看过参考答案时仍如实批改，但不要声称这是独立掌握的证明。资料：\n' + compact_json({
                       "question": card["question"], "referenceAnswer": card["referenceAnswer"], "material": card["material"],
-                      "studentAnswer": response, "referenceViewed": assisted}, ensure_ascii=False))
+                      "studentAnswer": response, "referenceViewed": assisted}))
         generator = integrations.deepseek_generate if integrations.read("ai").get("mode", "harness") == "deepseek" else integrations.harness_generate
         result = generator(prompt)
         feedback = assess_response(result, card)
