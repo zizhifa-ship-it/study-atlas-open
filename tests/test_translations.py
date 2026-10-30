@@ -4,7 +4,8 @@ import tempfile
 import threading
 import unittest
 from http.server import ThreadingHTTPServer
-from urllib.request import Request, urlopen
+from urllib.request import urlopen
+from http_helpers import authorized_request as Request
 from urllib.error import HTTPError
 from pathlib import Path
 from integrations import IntegrationError
