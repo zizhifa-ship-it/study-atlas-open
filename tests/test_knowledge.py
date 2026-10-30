@@ -76,6 +76,14 @@ class KnowledgeTests(unittest.TestCase):
         old=self.build();self.ai.review['issues']=[{"moduleId":"unknown","severity":"warning","kind":"evidence","problem":"无效模块","suggestion":"核对"}]
         with self.assertRaises(IntegrationError):self.build()
         self.assertEqual(self.store.read()['videos'][0]['knowledge'],old)
+    def test_invalid_correction_preserves_module_and_stays_unresolved(self):
+        draft={"modules":[module()]}
+        review={"summary":"检查依据摘录。","issues":[{"moduleId":"m1","severity":"warning","kind":"evidence","problem":"摘录需要核对。","suggestion":"回到原资料。"}],"corrections":[{"issueIndex":0,"moduleId":"m1","field":"evidence","value":"错误地返回字符串","reason":"修订摘录。"}]}
+        revised,report=review_modules(lambda p:{"content":json.dumps(review)},draft,SOURCE,'原始字幕')
+        self.assertEqual(revised,draft['modules'])
+        self.assertFalse(report['issues'][0]['resolved'])
+        self.assertEqual(report['corrections'],[])
+        self.assertIn('格式校验',report['issues'][0]['suggestion'])
     def test_source_edited_during_review_does_not_get_old_results(self):
         def edit():
             data=self.store.read();data['videos'][0]['transcript']+='用户新补充的资料。';self.store.save(data)
