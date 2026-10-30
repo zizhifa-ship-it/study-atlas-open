@@ -1,14 +1,17 @@
+import {localizedVideo} from './translations.js';
+import {cornellData} from './cornell.js';
 // 纯文本导出；只在用户主动下载时包含其个人学习内容。
-export function libraryMarkdown(library) {
+export function libraryMarkdown(library, languages={}) {
   const lines=['# 我的学习图谱','','按“分类 → 视频 → 知识模块 → 笔记”整理。',''];
   const md=v=>String(v || '').replace(/[\\`*_{}\[\]<>#|]/g,'\\$&');
   const link=v=>String(v).replace(/[<>\s]/g,encodeURIComponent);
   const status={todo:'待学习',learning:'学习中',done:'已学完'};
   function addCategory(c,depth) {
     lines.push('#'.repeat(Math.min(depth,6))+' '+md(c.name),'',c.description || '','');
-    for(const v of library.videos.filter(v=>v.categoryId===c.id)) {
+    for(const original of library.videos.filter(v=>v.categoryId===c.id)) {
+      const v=localizedVideo(original,languages[original.id] || 'zh-CN');
       lines.push(`### [${md(v.aiTitle || v.title)}](<${link(v.url)}>)`,'',`- 作者：${md(v.author || '未填写')}`,`- 状态：${status[v.status]}`,`- 标签：${(v.tags || []).map(md).join('、') || '无'}`,'');
-      if(v.summary) lines.push('#### 知识总结','',v.summary,'');
+      if(v.summary) {const c=cornellData(v);lines.push('#### 康奈尔笔记','','**提示与问题**','',...c.cues.map(q=>'- '+q),'','**课堂记录**','',v.summary,'','**归纳小结**','',c.summary,'');}
       const k=v.knowledge;
       if(k) {
         lines.push('#### 知识模块与脑图大纲','',k.overview,'');
@@ -16,7 +19,8 @@ export function libraryMarkdown(library) {
           lines.push('- '+md(m.title),...m.concepts.map(c=>'  - '+md(c.name)), '');
         }
         for(const m of k.modules) {
-          lines.push('#### '+md(m.title),'','**学习目标**：'+m.objective,'','**前置知识**：'+(m.prerequisites.join('、') || '无'),'',m.notes,'');
+          const c=cornellData(m);lines.push('#### '+md(m.title),'','**学习目标**：'+m.objective,'','**前置知识**：'+(m.prerequisites.join('、') || '无'),'','**康奈尔提示与问题**','',...c.cues.map(q=>'- '+q),'','**课堂记录**','',m.notes,'','**归纳小结**','',c.summary,'');
+          if(m.procedure){const f=m.procedure;lines.push('**实验与操作流程**','','目标：'+f.goal,'',...f.requirements.map(t=>'- 条件：'+t),'');for(const [i,step] of f.steps.entries())lines.push((i+1)+'. '+step.action,'','预期现象：'+step.expected,'','验证方法：'+step.verify,'');lines.push('结果与边界：'+f.conclusion,'');}
           lines.push('**概念卡片**','',...m.concepts.map(c=>'- **'+md(c.name)+'**：'+c.explanation),'');
           if(m.examples.length) lines.push('**课程例子**','',...m.examples.map(t=>'- '+t),'');
           if(m.pitfalls.length) lines.push('**易错点**','',...m.pitfalls.map(t=>'- '+t),'');
