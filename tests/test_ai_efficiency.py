@@ -51,6 +51,13 @@ class EfficiencyTests(unittest.TestCase):
         self.assertEqual(len(calls), 2); self.assertFalse(list(self.ai.local.glob('ai-cache-*.json')))
         def fail(prompt): raise IntegrationError('网络断线')
         with self.assertRaises(IntegrationError): validated_request(self.ai, fail, 'A', lambda r:r, 'network')
+    def test_harness_provider_model_and_reasoning_each_isolate_cache(self):
+        calls=[]
+        def generate(prompt):calls.append(prompt);return {'content':'{}'}
+        for provider,model,effort in [('a','same','low'),('a','same','low'),('b','same','low'),('b','same','high'),('b','other','high')]:
+            self.ai.write('harness',{'model':{'provider':provider,'model':model,'reasoningEffort':effort}})
+            validated_request(self.ai,generate,'same',lambda r:r['content'],'harness')
+        self.assertEqual(len(calls),4)
     def test_long_material_reuses_unchanged_chunks_and_keeps_tail(self):
         calls = []
         def generate(prompt): calls.append(prompt); return {'content': prompt.split('资料：\n')[-1][-30:]}
