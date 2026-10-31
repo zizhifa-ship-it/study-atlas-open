@@ -381,6 +381,7 @@ def make_handler(store, integrations=None):
                           "/index.html": ("index.html", "text/html; charset=utf-8"),
                           "/styles.css": ("styles.css", "text/css; charset=utf-8"),
                           "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+                          "/harness-models.js": ("harness-models.js", "text/javascript; charset=utf-8"),
                           "/api-client.js": ("api-client.js", "text/javascript; charset=utf-8"),
                           "/knowledge.js": ("knowledge.js", "text/javascript; charset=utf-8"),
                           "/practice.js": ("practice.js", "text/javascript; charset=utf-8"),
