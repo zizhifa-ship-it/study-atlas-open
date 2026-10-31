@@ -1,6 +1,8 @@
 """浏览器测试专用临时服务；不读取正式资料、账号或调用真实 AI。"""
 import json
 import base64
+import copy
+import hashlib
 import tempfile
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -12,11 +14,14 @@ from test_translations import TranslationAI
 from test_integrations import CATALOG, SELECTION
 from harness_models import catalog_view
 from integrations import Integrations
+from test_knowledge import FakeKnowledgeAI, module
+from knowledge import material_hash
+from ai_efficiency import model_identity
 
 
 class DemoAI(PracticeAI):
     def __init__(self):
-        super().__init__();self.translator=TranslationAI()
+        super().__init__();self.translator=TranslationAI();self.knowledge=FakeKnowledgeAI()
         self.write('harness',{'cookies':[{'name':'test'}],'model':SELECTION,'catalog':catalog_view(CATALOG)})
     def read(self,name):return self.translator.read(name)
     def write(self,name,value):self.translator.write(name,value)
@@ -29,6 +34,7 @@ class DemoAI(PracticeAI):
     def _save_ai(self,data):return Integrations._save_ai(self,data)
     def harness_generate(self,prompt):
         if prompt.startswith('你在做学习笔记翻译'):return self.translator.harness_generate(prompt)
+        if any(marker in prompt for marker in ['请把课程规划','指定模块','独立的第二轮自查']):return self.knowledge.harness_generate(prompt)
         payload=json.loads(prompt.split('资料：\n')[-1]);wrong=payload['studentAnswer']=='不知道'
         self.result.update(verdict='incorrect' if wrong else 'correct',score=15 if wrong else 90,
                            feedback='还没有解释 DHCP 的作用，需要回到模块复习。' if wrong else '正确解释了地址自动分配。',
@@ -43,8 +49,16 @@ if __name__=='__main__':
         # 仅用于测试图文加载的 1x1 PNG，不是真实课程画面。
         (folder/name).write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nmXcAAAAASUVORK5CYII='))
         data['videos'][0]['visuals']={'status':'ready','cover':name,'frames':[{'asset':name,'timeSec':20+i*20,'label':'测试画面','moduleId':'m1'} for i in range(3)],'message':'测试专用','createdAt':'2026-10-30'}
-        path.write_text(json.dumps(data,ensure_ascii=False))
         ai=DemoAI();ai.root=Path(tmp)
+        interrupted=copy.deepcopy(data['videos'][0]);interrupted.update(id='v2',url='https://example.org/recovery-course',title='中断测试课程',knowledge=None,visuals=None,
+            automation={'status':'failed','message':'连接中断，已有进度保留','task':'knowledge'})
+        data['videos'].append(interrupted)
+        job={'version':3,'fingerprint':material_hash(interrupted),'modelKey':model_identity(ai),'mode':'build',
+             'material':interrupted['transcript'],'plan':{'title':'恢复测试课程','overview':'继续第二模块并完成自查。',
+             'modules':[{'title':'IP 与 DHCP','objective':'解释地址分配','prerequisites':[]},{'title':'传输可靠性','objective':'比较传输机制','prerequisites':['IP']}]},
+             'modules':[module('m1')]}
+        ai.write('knowledge-job-'+hashlib.sha256(b'v2').hexdigest()[:24],job)
+        path.write_text(json.dumps(data,ensure_ascii=False))
         server=ThreadingHTTPServer(('127.0.0.1',0),make_handler(LibraryStore(path),ai))
         print('TEST_URL=http://127.0.0.1:'+str(server.server_port),flush=True)
         try:server.serve_forever()
