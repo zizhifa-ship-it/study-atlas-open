@@ -37,3 +37,24 @@
 .image-unavailable:before{content:"画面暂不可用，可在质量与来源重新生成";display:block;font-size:12px;line-height:1.8;color:#63775c;padding:24px;background:#edf1e7}
 
 .course-poster img[hidden],.scene-gallery img[hidden],.video-cover img[hidden]{display:none}
+/* 整理进度按实际步骤呈现，不用估算的完成时间。 */
+.task-overview {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:20px 0;}
+.task-overview>div {padding:20px;background:var(--surface,#fff);border:1px solid var(--line,#e0e5dc);border-radius:16px;display:flex;flex-direction:column;gap:7px;}
+.task-overview strong {font-size:30px;color:var(--green,#214d3d);font-weight:650;}
+.task-overview span {font-size:13px;color:var(--muted,#6e796e);}
+.task-filters {display:flex;gap:8px;flex-wrap:wrap;margin:20px 0;}
+.task-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start;}
+.task-card {min-width:0;margin:0;}
+.task-card-top {display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;}
+.task-card h2 {font-size:20px;line-height:1.5;margin:16px 0 10px;overflow-wrap:anywhere;}
+.task-badge {font-size:12px;font-weight:600;border-radius:20px;padding:5px 10px;background:#edf2e5;color:#365c40;}
+.task-badge.attention {background:#fcf0df;color:#885d23;}
+.task-badge.working {background:#e8f0f8;color:#315a80;}
+.task-message {font-size:14px;line-height:1.8;overflow-wrap:anywhere;}
+.task-recovery {padding:12px 14px;background:#f5f7f1;border-radius:10px;margin:14px 0;font-size:13px;line-height:1.8;}
+.task-recovery p {margin:0;}
+.task-recovery progress {width:100%;height:7px;accent-color:#3d6d50;margin-top:12px;}
+.task-card>.metadata {display:block;margin-top:12px;line-height:1.7;}
+[data-ai-mode][hidden] {display:none !important;}
+[data-ai-mode]>fieldset {margin:16px 0;min-width:0;}
+@media(max-width:760px) {.task-grid {grid-template-columns:1fr;}.task-overview {gap:8px;}.task-overview>div {padding:14px 10px;}.task-overview strong {font-size:25px;}.task-overview span {font-size:11px;}}
