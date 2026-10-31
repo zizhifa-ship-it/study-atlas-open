@@ -418,12 +418,17 @@ def make_handler(store, integrations=None):
                     result = importer.submit_translation(string(data.get('videoId'), '视频编号', 100), string(data.get('language'), '目标语言', 20))
                 elif path == "/api/learning/grade":
                     result = grade_answer(store, integrations, data)
-                elif path == "/api/integrations/harness/connect":
-                    result = integrations.connect_harness(string(data.get("url"), "Harness 启动链接", 4000))
-                elif path == "/api/integrations/harness/check":
-                    result = integrations.check_harness()
-                elif path == "/api/integrations/ai":
-                    result = integrations.save_ai(data)
+                elif path in {"/api/integrations/harness/connect", "/api/integrations/harness/check", "/api/integrations/ai"}:
+                    # 覆盖一键导入中各模型阶段之间的间隙，以及等待中的任务。
+                    with importer.lock:
+                        if importer.queue.unfinished_tasks:
+                            raise IntegrationError('整理队列正在运行，请全部完成后修改 AI 设置或刷新模型列表')
+                        if path.endswith('/connect'):
+                            result = integrations.connect_harness(string(data.get("url"), "Harness 启动链接", 4000))
+                        elif path.endswith('/check'):
+                            result = integrations.check_harness()
+                        else:
+                            result = integrations.save_ai(data)
                 elif path == "/api/ai/generate":
                     original = store.read()
                     result = integrations.generate(data, original)
