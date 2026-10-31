@@ -30,6 +30,21 @@ try{
  await page.reload();await page.locator('.quality-course>summary').first().click();await page.getByText('字幕与学习资料（通常由网站自动读取）',{exact:true}).click();
  assert((await page.locator('[data-transcript-form] textarea').inputValue()).includes('从文件导入'));
  await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+ await page.goto(base+'/#insights');await page.getByRole('button',{name:'AI 连接设置',exact:true}).click();
+ await page.getByRole('dialog').waitFor();
+ await page.getByLabel('笔记使用的模型',{exact:true}).selectOption(JSON.stringify({provider:'test',model:'test-model'}));
+ await page.getByLabel('推理强度',{exact:true}).selectOption('high');
+ await page.getByRole('button',{name:'保存 AI 设置',exact:true}).click();await page.getByText('AI 设置已保存',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'AI 连接设置',exact:true}).click();
+ assert.equal(await page.getByLabel('推理强度',{exact:true}).inputValue(),'high');
+ await page.getByRole('button',{name:'刷新模型列表',exact:true}).click();
+ await page.getByText('模型列表已更新，已保存的选择保持不变',{exact:true}).waitFor();
+ assert.equal(await page.getByLabel('推理强度',{exact:true}).inputValue(),'high');
+ await page.getByLabel('笔记使用的模型',{exact:true}).selectOption(JSON.stringify({provider:'test',model:'plain'}));
+ assert(await page.getByLabel('推理强度',{exact:true}).isDisabled());
+ await page.getByRole('button',{name:'保存 AI 设置',exact:true}).click();await page.getByText('AI 设置已保存',{exact:true}).waitFor();
+ await page.reload();await page.getByRole('button',{name:'AI 连接设置',exact:true}).click();
+ assert.equal(JSON.parse(await page.getByLabel('笔记使用的模型',{exact:true}).inputValue()).model,'plain');
  assert.equal(errors.length,0,errors.join('\n'));
- console.log('笔记端到端验证通过：语言选择 → AI 翻译 → 保存 → 脑图 → 中文对照 → 独立质量板块 → 资料编辑 → 刷新 → 手机布局。');
+ console.log('笔记端到端验证通过：语言选择 → AI 翻译 → 保存 → 脑图 → 中文对照 → 独立质量板块 → 资料编辑 → 刷新 → 手机布局 → 模型与推理强度选择 → 保存 → 刷新目录 → 重载保留。');
 }finally{await browser?.close();server.kill('SIGINT');}
