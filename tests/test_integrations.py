@@ -7,6 +7,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 from integrations import Integrations, IntegrationError
+from harness_models import catalog_view, validate_selection
+
+
+SELECTION = {'provider':'test', 'model':'test-model', 'reasoningEffort':'low'}
+CATALOG = {'default':SELECTION, 'routableProviders':['test'], 'groups':[
+    {'id':'test','name':'Test','models':[{'id':'test-model','reasoning':{'efforts':[{'id':'low'},{'id':'high'}], 'defaultEffort':'low'}}, {'id':'plain'}]},
+    {'id':'offline','models':[{'id':'hidden'}]}]}
 
 
 class IntegrationTests(unittest.TestCase):
@@ -41,10 +48,12 @@ class IntegrationTests(unittest.TestCase):
             model.assert_not_called()
 
     def test_harness_reads_completion_of_its_own_session(self):
-        self.engine.write("harness",{"baseUrl":"http://127.0.0.1:3080","cookies":[{"name":"test"}],"model":{"model":"test-model"}})
+        self.engine.write("harness",{"baseUrl":"http://127.0.0.1:3080","cookies":[{"name":"test"}],"model":SELECTION})
         calls=[]
         def rpc(config,method,args):
             calls.append((method,args))
+            if method=='session/modelCatalog':return CATALOG
+            if method=='session/selectModel':return {'selected':SELECTION}
             if method=="session/create":return {"sessionId":"owned-session"}
             if method=="session/projections":return {"asOfSeq":8}
             if method=="session/page":return {"records":[
@@ -57,6 +66,58 @@ class IntegrationTests(unittest.TestCase):
         page=next(args for method,args in calls if method=="session/page")
         self.assertEqual(page["request"]["address"]["sessionId"],"owned-session")
         self.assertFalse(any(method=="session/list" for method,args in calls))
+        methods=[method for method,args in calls]
+        self.assertLess(methods.index('session/selectModel'),methods.index('session/prompt'))
+        self.assertEqual(dict(SELECTION,sessionId='owned-session'),next(args['request'] for method,args in calls if method=='session/selectModel'))
+        self.assertEqual(result['modelSelection'],SELECTION)
+
+    def connected_harness(self):
+        self.engine.write('harness',{'baseUrl':'http://127.0.0.1:3080','cookies':[{'name':'test'}], 'model':SELECTION})
+
+    def test_catalog_filters_unroutable_and_unknown_fields_and_validates_effort(self):
+        catalog=catalog_view(dict(CATALOG,secret='never-display'))
+        self.assertEqual([g['id'] for g in catalog['groups']],['test'])
+        self.assertNotIn('secret',json.dumps(catalog))
+        self.assertEqual(validate_selection(catalog,{'provider':'test','model':'test-model'}),SELECTION)
+        for value in [{'provider':'test','model':'test-model','reasoningEffort':'max'}, {'provider':'test','model':'plain','reasoningEffort':'high'}, {'provider':'offline','model':'hidden'}]:
+            with self.assertRaises(ValueError):validate_selection(catalog,value)
+
+    def test_save_and_refresh_preserve_explicit_model_and_reject_invalid_choice(self):
+        self.connected_harness()
+        chosen=dict(SELECTION,reasoningEffort='high')
+        with patch.object(self.engine,'rpc',return_value=CATALOG):
+            self.engine.save_ai({'mode':'harness','harnessModel':chosen})
+            self.engine.check_harness()
+            self.assertEqual(self.engine.status()['harness']['model'],chosen)
+            before=self.engine.read('ai')
+            with self.assertRaises(IntegrationError):self.engine.save_ai({'mode':'harness','harnessModel':{'provider':'test','model':'missing'}})
+            self.assertEqual(self.engine.read('ai'),before)
+            self.assertEqual(self.engine.read('harness')['model'],chosen)
+
+    def test_busy_task_cannot_change_model_or_connection(self):
+        self.engine.lock.acquire()
+        try:
+            for action in [lambda:self.engine.save_ai({'mode':'deepseek'}),self.engine.check_harness,lambda:self.engine.connect_harness('test')]:
+                with self.assertRaisesRegex(IntegrationError,'正在运行'):action()
+        finally:self.engine.lock.release()
+
+    def test_model_mismatch_or_unavailable_never_sends_prompt(self):
+        self.connected_harness()
+        calls=[]
+        def rpc(config,method,args):
+            calls.append(method)
+            if method=='session/modelCatalog':return CATALOG
+            if method=='session/create':return {'sessionId':'owned'}
+            if method=='session/selectModel':return {'selected':dict(SELECTION,model='different')}
+            return {}
+        with patch.object(self.engine,'rpc',side_effect=rpc):
+            with self.assertRaisesRegex(IntegrationError,'不同'):self.engine.harness_generate('private material')
+            self.assertNotIn('session/prompt',calls)
+            self.assertIn('session/cancel',calls)
+            config=self.engine.read('harness');config['model']={'provider':'test','model':'missing'};self.engine.write('harness',config)
+            calls.clear()
+            with self.assertRaisesRegex(IntegrationError,'不可用'):self.engine.harness_generate('private material')
+            self.assertEqual(calls,['session/modelCatalog'])
 
     def test_oauth_uses_readonly_scope_pkce_and_expires_state(self):
         self.engine.save_youtube_client({"installed":{"client_id":"test-id","client_secret":"test-secret"}})
