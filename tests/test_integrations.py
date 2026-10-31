@@ -101,6 +101,29 @@ class IntegrationTests(unittest.TestCase):
                 with self.assertRaisesRegex(IntegrationError,'正在运行'):action()
         finally:self.engine.lock.release()
 
+    def test_http_queue_blocks_settings_even_between_model_calls(self):
+        import threading
+        from types import SimpleNamespace
+        from http.server import ThreadingHTTPServer
+        from urllib.request import urlopen
+        from urllib.error import HTTPError
+        from http_helpers import authorized_request
+        from server import LibraryStore, make_handler
+        path=Path(self.temp.name)/'library.json'
+        path.write_text(json.dumps({'schemaVersion':1,'revision':0,'categories':[],'videos':[],'insights':[]}))
+        queue=SimpleNamespace(unfinished_tasks=1)
+        with patch('server.AutoImporter',return_value=SimpleNamespace(lock=threading.Lock(),queue=queue)):
+            handler=make_handler(LibraryStore(path),self.engine)
+        server=ThreadingHTTPServer(('127.0.0.1',0),handler)
+        threading.Thread(target=server.serve_forever,daemon=True).start()
+        try:
+            req=authorized_request('http://127.0.0.1:%d/api/integrations/ai'%server.server_port,data=b'{"mode":"deepseek"}',headers={'Content-Type':'application/json'})
+            with self.assertRaises(HTTPError) as error:urlopen(req)
+            self.assertEqual(error.exception.code,400)
+            self.assertIn('整理队列',json.load(error.exception)['error'])
+            self.assertEqual(self.engine.read('ai'),{})
+        finally:server.shutdown();server.server_close()
+
     def test_model_mismatch_or_unavailable_never_sends_prompt(self):
         self.connected_harness()
         calls=[]
