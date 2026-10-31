@@ -108,6 +108,20 @@ class KnowledgeTests(unittest.TestCase):
         self.assertEqual(len(self.ai.calls),1)
         self.assertEqual(len(result['modules']),2)
         self.assertFalse(any(v for k,v in self.ai.state.items() if k.startswith('knowledge-job-')))
+    def test_model_change_does_not_resume_old_model_checkpoint(self):
+        generate=self.ai.harness_generate
+        def timeout(prompt):
+            if '独立的第二轮自查' in prompt:raise IntegrationError('超时')
+            return generate(prompt)
+        self.ai.harness_generate=timeout
+        with self.assertRaises(IntegrationError):self.build()
+        read=self.ai.read
+        self.ai.read=lambda name: {'model':{'provider':'new-provider','model':'different','reasoningEffort':'low'}} if name=='harness' else read(name)
+        self.ai.harness_generate=generate;self.ai.calls=[]
+        self.build()
+        self.assertEqual(len(self.ai.calls),4)
+        self.assertTrue(any('请把课程规划' in prompt for prompt in self.ai.calls))
+
     def test_review_batches_resume_without_repeating_completed_batch(self):
         self.ai.module_count=4;generate=self.ai.harness_generate;reviews=[]
         def interrupted(prompt):
