@@ -23,7 +23,7 @@ from knowledge import validate_knowledge
 from practice import validate_learning, practice_overview, grade_answer
 from note_layout import clean_cornell
 from video_media import validate_thumbnail, validate_visuals, ASSET
-from note_translations import validate_translations
+from note_translations import validate_translations, LANGUAGES
 from security import SECURITY_HEADERS, RateLimiter, local_boundary, strict_json
 
 ROOT = Path(__file__).resolve().parent
@@ -68,8 +68,11 @@ def clean_automation(value):
     require(isinstance(value, dict), "整理进度格式不正确")
     status = value.get("status", "")
     require(status in {"", "queued", "metadata", "transcript", "ai", "ready", "needs_content", "failed"}, "整理状态不正确")
+    task = string(value.get('task', ''), '整理任务类型', 50, True)
+    from tasks import TASK_NAMES
+    require(not task or task in TASK_NAMES or task.startswith('translate:') and task[10:] in LANGUAGES, '整理任务类型不正确')
     return {"status": status, "message": string(value.get("message", ""), "整理说明", 1000, True),
-            "model": string(value.get("model", ""), "整理模型", 200, True)}
+            "model": string(value.get("model", ""), "整理模型", 200, True), **({'task': task} if task else {})}
 
 
 def validate_library(payload):
@@ -326,6 +329,9 @@ def make_handler(store, integrations=None):
                 self.respond(200, {'token':security_token})
             elif path == "/api/integrations/status":
                 self.respond(200, dict(integrations.status(), security={'mode':'local','requestToken':True,'originChecks':True,'contentPolicy':True,'rateLimits':True}))
+            elif path == '/api/tasks':
+                from tasks import task_snapshot
+                self.respond(200, task_snapshot(importer))
             elif path == "/api/youtube/callback":
                 try:
                     integrations.youtube_callback(parse_qs(urlsplit(self.path).query))
@@ -408,6 +414,8 @@ def make_handler(store, integrations=None):
                 path = urlsplit(self.path).path
                 if path == "/api/import":
                     result = importer.submit(string(data.get("url"), "视频链接", 3000), data.get("retry") is True, data.get("detailed", True) is not False)
+                elif path == '/api/tasks/resume':
+                    result = importer.resume(string(data.get('videoId'), '视频编号', 100))
                 elif path == "/api/knowledge/build":
                     result = importer.submit_knowledge(string(data.get("videoId"), "视频编号", 100), data.get("reviewOnly") is True)
                 elif path == '/api/knowledge/format':
