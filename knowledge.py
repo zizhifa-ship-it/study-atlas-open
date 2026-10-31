@@ -218,13 +218,15 @@ def build_knowledge(store, integrations, vid, progress, prepared=None, review_on
     checkpoint_name = "knowledge-job-" + hashlib.sha256(vid.encode()).hexdigest()[:24]
     checkpoint = integrations.read(checkpoint_name)
     mode = "review" if review_only else "build"
-    if checkpoint.get("fingerprint") != fingerprint or checkpoint.get("mode") != mode or checkpoint.get("version") != 2:
-        checkpoint = {"version": 2, "fingerprint": fingerprint, "mode": mode}
     def save_checkpoint():
         integrations.write(checkpoint_name, checkpoint)
     if not integrations.lock.acquire(blocking=False):
         raise IntegrationError("其他 AI 任务正在进行，稍后重新构建模块")
     try:
+        from ai_efficiency import model_identity
+        model_key = model_identity(integrations)
+        if checkpoint.get("fingerprint") != fingerprint or checkpoint.get("mode") != mode or checkpoint.get("version") != 3 or checkpoint.get('modelKey') != model_key:
+            checkpoint = {"version": 3, "fingerprint": fingerprint, "mode": mode, 'modelKey': model_key}
         generator = integrations.deepseek_generate if integrations.read("ai").get("mode", "harness") == "deepseek" else integrations.harness_generate
         material = checkpoint.get("material") or (prepared if prepared is not None else prepare_material(source, generator, lambda i, n: progress("知识模块：整理资料第 %d/%d 段" % (i, n)), engine=integrations))
         checkpoint["material"] = material
