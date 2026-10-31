@@ -26,13 +26,14 @@ class AutoImporter:
         self.store, self.integrations = store, integrations
         self.queue = queue.Queue(maxsize=20)
         self.lock = threading.Lock()
+        self.running = None
         # 重启只标记中断，不自动重新调用计费模型。
         with store.lock:
             data = store.read()
             changed = False
             for v in data["videos"]:
                 if v.get("automation", {}).get("status") in ACTIVE:
-                    v["automation"] = {"status": "failed", "message": "上次整理被中断，点击重新整理继续"}
+                    v["automation"] = dict(v['automation'], status='failed', message='上次整理被中断，可在整理任务中继续')
                     changed = True
             if changed:
                 store.save(data)
@@ -55,7 +56,7 @@ class AutoImporter:
                 stamp = datetime.now(timezone.utc).isoformat()
                 existing = {"id": uuid.uuid4().hex, "title": "正在识别视频…", "url": url, "author": "", "categoryId": pending["id"], "durationSec": 0, "tags": [], "status": "todo", "favorite": False, "summary": "", "transcript": "", "notes": [], "createdAt": stamp, "updatedAt": stamp}
                 data["videos"].append(existing)
-            existing["automation"] = {"status": "queued", "message": "链接已保存，等待自动整理"}
+            existing["automation"] = {"status": "queued", "message": "链接已保存，等待自动整理", 'task': 'detailed' if detailed else 'import'}
             saved = self.store.save(data)
             self.queue.put_nowait((existing["id"], "detailed" if detailed else "import"))
             return {"videoId": existing["id"], "duplicate": False, "library": saved}
@@ -73,7 +74,7 @@ class AutoImporter:
                 return {"videoId": vid, "duplicate": True, "library": data}
             if self.queue.full():
                 raise IntegrationError("整理队列已满，请稍后再试")
-            target["automation"] = {"status": "queued", "message": "等待 AI 自查" if review_only else "等待构建详尽笔记、脑图和知识模块"}
+            target["automation"] = {"status": "queued", "message": "等待 AI 自查" if review_only else "等待构建详尽笔记、脑图和知识模块", 'task': 'review' if review_only else 'knowledge'}
             saved = self.store.save(data)
             self.queue.put_nowait((vid, "review" if review_only else "knowledge"))
             return {"videoId": vid, "duplicate": False, "library": saved}
@@ -84,6 +85,8 @@ class AutoImporter:
             target = next((v for v in data["videos"] if v["id"] == vid), None)
             if target is None:
                 raise IntegrationError("视频已移除，整理停止")
+            if 'automation' in fields:
+                fields['automation'] = dict(target.get('automation', {}), **fields['automation'])
             target.update(fields)
             target["updatedAt"] = datetime.now(timezone.utc).isoformat()
             self.store.save(data)
@@ -96,7 +99,7 @@ class AutoImporter:
             if target.get('automation', {}).get('status') in ACTIVE:
                 return {'videoId': vid, 'duplicate': True, 'library': data}
             if self.queue.full(): raise IntegrationError('整理队列已满，请稍后重试')
-            target['automation'] = {'status': 'queued', 'message': '等待 AI 整理康奈尔笔记结构'}
+            target['automation'] = {'status': 'queued', 'message': '等待 AI 整理康奈尔笔记结构', 'task': 'format'}
             saved = self.store.save(data); self.queue.put_nowait((vid, 'format'))
             return {'videoId': vid, 'library': saved, 'duplicate': False}
 
@@ -107,12 +110,30 @@ class AutoImporter:
             canonical_video_url(target['url'])
             if target.get('automation',{}).get('status') in ACTIVE: raise IntegrationError('课程正在整理，完成后可补充视频画面')
             if self.queue.full(): raise IntegrationError('整理队列已满，请稍后再试')
-            target['automation']={'status':'queued','message':'等待准备图文导学'}
+            target['automation']={'status':'queued','message':'等待准备图文导学','task':'visuals'}
             saved=self.store.save(data);self.queue.put_nowait((vid,'visuals'))
             return {'videoId':vid,'library':saved}
 
     def stage(self, vid, status, message):
-        self.update(vid, automation={"status": status, "message": message})
+        task = self.running[1] if self.running and self.running[0] == vid else ''
+        self.update(vid, automation={"status": status, "message": message, **({'task': task.replace('saved-', '')} if task else {})})
+
+    def resume(self, vid):
+        from tasks import recovery_mode
+        with self.lock, self.store.lock:
+            data = self.store.read()
+            target = next((v for v in data['videos'] if v['id'] == vid), None)
+            if not target: raise IntegrationError('视频已移除')
+            status = target.get('automation', {}).get('status')
+            if status in ACTIVE: return {'videoId': vid, 'duplicate': True, 'library': data}
+            if status not in {'failed', 'needs_content'}: raise IntegrationError('这门课没有需要恢复的中断任务')
+            if self.queue.full(): raise IntegrationError('整理队列已满，请稍后再试')
+            mode = recovery_mode(self.integrations, target)
+            if mode in {'knowledge', 'review'}: material_for(target)
+            target['automation'] = {'status': 'queued', 'message': '等待继续已保存的整理进度', 'task': mode.replace('saved-', '')}
+            saved = self.store.save(data)
+            self.queue.put_nowait((vid, mode))
+            return {'videoId': vid, 'duplicate': False, 'library': saved}
 
     def submit_translation(self, vid, language):
         if language not in LANGUAGES or language == 'zh-CN':
@@ -127,13 +148,14 @@ class AutoImporter:
             if target.get('automation', {}).get('status') in ACTIVE:
                 raise IntegrationError('这门课正在整理，请完成后再生成译文')
             if self.queue.full(): raise IntegrationError('整理队列已满，请稍后重试')
-            target['automation'] = {'status': 'queued', 'message': '等待生成%s笔记' % LANGUAGES[language]}
+            target['automation'] = {'status': 'queued', 'message': '等待生成%s笔记' % LANGUAGES[language], 'task': 'translate:' + language}
             saved = self.store.save(data); self.queue.put_nowait((vid, 'translate:' + language))
             return {'videoId': vid, 'cached': False, 'library': saved}
 
     def worker(self):
         while True:
             vid, mode = self.queue.get()
+            self.running = (vid, mode)
             try:
                 if mode == 'visuals':
                     build_visuals(self.store, self.integrations, vid, lambda message: self.stage(vid, 'ai', message))
@@ -144,7 +166,7 @@ class AutoImporter:
                 elif mode in {"knowledge", "review"}:
                     make_knowledge(self.store, self.integrations, vid, lambda message: self.stage(vid, "ai", message), review_only=mode == "review")
                 else:
-                    self.process(vid, detailed=mode == "detailed")
+                    self.process(vid, detailed=mode in {'detailed', 'saved-detailed'}, reuse_saved=mode.startswith('saved-'))
             except IntegrationError as exc:
                 try:
                     self.stage(vid, "failed", str(exc))
@@ -156,13 +178,24 @@ class AutoImporter:
                 except Exception:
                     pass
             finally:
+                try:
+                    current = next(v for v in self.store.read()['videos'] if v['id'] == vid)
+                    self.update(vid, automation=dict(current.get('automation', {}), task=mode.replace('saved-', '')))
+                except Exception:
+                    pass
+                self.running = None
                 self.queue.task_done()
 
-    def process(self, vid, detailed=False):
+    def process(self, vid, detailed=False, reuse_saved=False):
         source = next(v for v in self.store.read()["videos"] if v["id"] == vid)
+        if reuse_saved and detailed and len(source.get('transcript', '').strip()) >= 20 and source.get('summary', '').strip():
+            make_knowledge(self.store, self.integrations, vid, lambda message: self.stage(vid, 'ai', message))
+            if getattr(self.integrations, 'root', None):
+                build_visuals(self.store, self.integrations, vid, lambda message: self.stage(vid, 'ai', message))
+            return
         self.stage(vid, "metadata", "正在识别标题和作者")
         try:
-            info = metadata(source["url"])
+            info = {'title': source['title'], 'author': source['author']} if reuse_saved else metadata(source["url"])
         except IntegrationError:
             if len(source.get("transcript", "").strip()) < 20 or source["title"] == "正在识别视频…":
                 raise
