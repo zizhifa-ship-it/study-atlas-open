@@ -9,15 +9,24 @@ sys.path.insert(0,str(Path(__file__).resolve().parent.parent))
 from server import LibraryStore,make_handler
 from test_practice import fixture,PracticeAI
 from test_translations import TranslationAI
+from test_integrations import CATALOG, SELECTION
+from harness_models import catalog_view
+from integrations import Integrations
 
 
 class DemoAI(PracticeAI):
     def __init__(self):
         super().__init__();self.translator=TranslationAI()
+        self.write('harness',{'cookies':[{'name':'test'}],'model':SELECTION,'catalog':catalog_view(CATALOG)})
     def read(self,name):return self.translator.read(name)
     def write(self,name,value):self.translator.write(name,value)
     def status(self):
-        return {"ai":{"mode":"harness","model":"mock-model","hasApiKey":False},"harness":{"configured":True,"model":{"model":"mock-model"}},"youtube":{"configured":False,"connected":False}}
+        return {"ai":dict({'mode':'harness','model':'mock-model','hasApiKey':False},**self.read('ai')),"harness":dict(configured=True,**{k:v for k,v in self.read('harness').items() if k!='cookies'}),"youtube":{"configured":False,"connected":False}}
+    def rpc(self,config,method,args):return CATALOG
+    def check_harness(self):return Integrations.check_harness(self)
+    def _check_harness(self):return Integrations._check_harness(self)
+    def save_ai(self,data):return Integrations.save_ai(self,data)
+    def _save_ai(self,data):return Integrations._save_ai(self,data)
     def harness_generate(self,prompt):
         if prompt.startswith('你在做学习笔记翻译'):return self.translator.harness_generate(prompt)
         payload=json.loads(prompt.split('资料：\n')[-1]);wrong=payload['studentAnswer']=='不知道'
