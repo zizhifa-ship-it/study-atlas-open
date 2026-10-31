@@ -12,6 +12,7 @@ const esc = (value = '') => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;'
 const uid = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
 const state = {library: null, view: 'home', id: null, search: '', status: 'all', favorites: false, integrations:null, aiDraft:null, aiJob:null, knowledgeTabs:{}, compactMaps:{}, noteLanguages:{}, practiceData:null,
+  tasksData:null,tasksError:'',tasksFilter:'all',
   practice:{mode:'today',course:'',current:null,drafts:{},revealed:{},skipped:[],busy:null,pendingRequests:{}}};
 try {state.noteLanguages=JSON.parse(localStorage.getItem('study-atlas-note-languages') || '{}');if(!state.noteLanguages || typeof state.noteLanguages!=='object' || Array.isArray(state.noteLanguages))state.noteLanguages={};for(const [id,language] of Object.entries(state.noteLanguages))if(!noteLanguages[language])delete state.noteLanguages[id];}catch {state.noteLanguages={};}
 const personalNotes = v => v.notes.filter(n=>!n.text.startsWith('旧版总结（'));
@@ -136,10 +137,14 @@ function go(view, id = '') {
 }
 function route() {
   const [view, id] = location.hash.slice(1).split('/');
-  state.view = ['home','category','videos','notes','video','insights','knowledge','practice','quality'].includes(view) ? view : 'home';
-  state.id = id ? decodeURIComponent(id) : null;
+  const nextId=id ? decodeURIComponent(id) : null;
+  const changed=state.view!==view || state.id!==nextId;
+  state.view = ['home','category','videos','notes','video','insights','knowledge','practice','quality','tasks'].includes(view) ? view : 'home';
+  state.id = nextId;
   if ((state.view === 'category' && !category(state.id)) || (state.view === 'video' && !video(state.id))) state.view = 'home';
+  if(changed) window.scrollTo(0,0);
   if (state.library) renderAll();
+  if (state.view==='tasks') refreshTasks().then(()=>{if(state.view==='tasks')renderMain();});
 }
 
 function renderNavigation() {
@@ -156,7 +161,7 @@ function renderNavigation() {
     }
   }
   addCategories(null);
-  html += '<div class="nav-section-title">连接与整理</div><button class="nav-item" data-action="ai-settings">'+icon('spark')+'AI / Harness 设置</button><button class="nav-item" data-action="youtube">'+icon('play')+'YouTube 播放列表（可选）</button>';
+  html += `<div class="nav-section-title">连接与整理</div><button class="nav-item${state.view==='tasks'?' active':''}" data-action="navigate" data-view="tasks">${icon('book')}整理任务<span class="nav-count">${videos.filter(v=>['queued','metadata','transcript','ai','failed','needs_content'].includes(v.automation?.status)).length}</span></button><button class="nav-item" data-action="ai-settings">${icon('spark')}AI / Harness 设置</button><button class="nav-item" data-action="youtube">${icon('play')}YouTube 播放列表（可选）</button>`;
   $('#navigation').innerHTML = html;
 }
 
@@ -248,12 +253,13 @@ function renderMain() {
   else if (state.view === 'notes') html = notesPage();
   else if (state.view === 'knowledge') html = knowledgePage();
   else if (state.view === 'quality') html = qualityPage();
+  else if (state.view === 'tasks') html = tasksPage();
   else if (state.view === 'practice') html = practicePage(state.practiceData,state.library,state.practice);
   else if (state.view === 'insights') html = insightsPage();
   else if (state.view === 'videos') html = heading('我的视频库','全部视频','收藏有价值的课程，按照自己的节奏学习。',addVideoButton) + videoSection(state.library.videos);
   else html = homePage();
   $('#content').innerHTML = html;
-  const name = state.search ? '搜索' : state.view === 'category' ? pathName(state.id) : state.view === 'video' ? pathName(video(state.id).categoryId) + ' / 视频笔记' : ({home:'分类总览',videos:'全部视频',notes:'学习笔记',insights:'AI 总结与经验',knowledge:'知识模块',practice:'复习与自测',quality:'质量与来源'}[state.view] || '分类总览');
+  const name = state.search ? '搜索' : state.view === 'category' ? pathName(state.id) : state.view === 'video' ? pathName(video(state.id).categoryId) + ' / 视频笔记' : ({home:'分类总览',videos:'全部视频',notes:'学习笔记',insights:'AI 总结与经验',knowledge:'知识模块',practice:'复习与自测',quality:'质量与来源',tasks:'整理任务'}[state.view] || '分类总览');
   $('#breadcrumb').innerHTML = '我的学习空间 <span class="muted">/</span> <strong>' + esc(name) + '</strong>';
   if(state.view==='video' && state.pendingModule) {
     document.getElementById('module-'+state.pendingModule)?.scrollIntoView({block:'start'});
@@ -298,7 +304,27 @@ function automationPanel(v) {
   const status=v.automation?.status;
   if(!status || status==='ready') return '';
   const active=['queued','metadata','transcript','ai'].includes(status);
-  return `<section class="panel import-panel" role="status"><strong>${active?'正在准备笔记':'这次整理尚未完成'}</strong><p>${active?esc(v.automation.message):'已有笔记保留，可在“质量与来源”里查看原因并重试。'}</p>${active?'<small>完成后自动保存，可以继续浏览其他课程。</small>':`<button class="button small" data-action="navigate" data-view="quality" data-id="${esc(v.id)}">查看详情</button>`}</section>`;
+  return `<section class="panel import-panel" role="status"><strong>${active?'正在准备笔记':'这次整理尚未完成'}</strong><p>${active?esc(v.automation.message):'已有笔记保留，可在“整理任务”中查看原因与已保存进度。'}</p>${active?'<small>完成后自动保存，可以继续浏览其他课程。</small>':''}<button class="button small" data-action="navigate" data-view="tasks">${active?'查看整理进度':'查看进度与恢复'}</button></section>`;
+}
+
+async function refreshTasks() {
+  try {state.tasksData=await request('/api/tasks');state.tasksError='';}
+  catch(error) {state.tasksError=error.message;}
+}
+function tasksPage() {
+  const data=state.tasksData,counts=data?.counts || {},filters=[['all','全部'],['active','进行中'],['attention','需要处理'],['ready','已完成']];
+  const active=['queued','metadata','transcript','ai'];
+  const items=(data?.items || []).filter(t=>state.tasksFilter==='all' || (state.tasksFilter==='active'?active.includes(t.status):state.tasksFilter==='attention'?['failed','needs_content'].includes(t.status):t.status==='ready'));
+  const labels={queued:'等待中',metadata:'识别视频',transcript:'读取资料',ai:'AI 整理中',failed:'需要继续',needs_content:'待补充资料',ready:'已完成'};
+  return heading('让进度看得见','整理任务','查看课程整理进度；中断后从已保存的步骤继续。',`<button class="button" data-action="task-refresh">刷新进度</button><button class="button soft" data-action="ai-settings">选择 AI 模型</button>`)
+    + `<div class="task-overview"><div><strong>${Number(counts.active || 0)}</strong><span>进行中 · 含等待 ${Number(counts.waiting || 0)} 条</span></div><div><strong>${Number(counts.attention || 0)}</strong><span>需要处理</span></div><div><strong>${Number(counts.ready || 0)}</strong><span>最近一次整理已完成</span></div></div>`
+    + `<div class="task-filters" role="group" aria-label="筛选整理任务">${filters.map(([key,name])=>`<button class="button small${state.tasksFilter===key?' soft':''}" aria-pressed="${state.tasksFilter===key}" data-action="task-filter" data-filter="${key}">${name}</button>`).join('')}</div>`
+    + (state.tasksError?`<p class="notice" role="alert">${esc(state.tasksError)}，可点击刷新进度。</p>`:'')
+    + (!data?'<p class="metadata" role="status">正在读取任务进度…</p>':items.length?`<div class="task-grid">${items.map(t=>{
+      const ck=t.checkpoint || {},needs=['failed','needs_content'].includes(t.status);
+      const recovery=ck.available?`已保存 ${Number(ck.modulesDone || 0)}/${Number(ck.modulesTotal || 0)} 个知识模块${ck.reviewsTotal?' · 已自查 '+Number(ck.reviewsDone || 0)+'/'+Number(ck.reviewsTotal)+' 批':''}`:ck.reason==='model_changed'?'模型或推理强度已改变，继续时会按当前设置重新构建；原笔记保留。':ck.reason==='legacy'?'旧版进度无法确认模型，将依据当前设置重新构建；已有笔记保留。':ck.reason==='source_changed'?'学习资料已改变，继续时依据新资料整理；原笔记保留。':t.hasMaterial?'已有学习资料可复用，无需重新读取字幕。':'尚无足够的学习资料，可重新获取或在“质量与来源”中补充。';
+      return `<article class="panel task-card" data-task-video="${esc(t.videoId)}"><div class="task-card-top"><span class="task-badge ${needs?'attention':active.includes(t.status)?'working':'complete'}">${esc(labels[t.status] || t.status)}</span><span class="metadata">${esc(t.taskName)}${t.queuePosition?' · 排队第 '+Number(t.queuePosition)+' 条':''}</span></div><h2>${esc(t.title)}</h2><p class="task-message">${esc(t.message || '等待下一步操作')}</p>${t.status!=='ready'?`<div class="task-recovery"><p>${esc(recovery)}</p>${ck.available&&ck.modulesTotal?`<progress value="${Number(ck.modulesDone || 0)}" max="${Number(ck.modulesTotal)}" aria-label="已保存知识模块"></progress>`:''}</div>`:''}<div class="button-row">${needs?`<button class="button small primary" data-action="task-resume" data-id="${esc(t.videoId)}">${t.hasMaterial?'继续整理':'重新获取并整理'}</button>`:''}<button class="button small" data-action="navigate" data-view="video" data-id="${esc(t.videoId)}">${t.hasNotes?'阅读已有笔记':'打开课程'}</button><button class="button small" data-action="navigate" data-view="quality" data-id="${esc(t.videoId)}">质量与来源</button></div>${needs?'<small class="metadata">继续会使用当前模型额度；匹配当前资料与模型的有效进度可复用。</small>':''}</article>`;
+    }).join('')}</div>`:empty('这个列表暂时没有任务','添加视频后可在这里查看；已保存的学习笔记可随时阅读。'));
 }
 function smartImportModal() {
   showModal('粘贴链接，一键整理','支持公开 YouTube、哔哩哔哩视频及 b23.tv 分享链接。原视频语言自动识别。', `<form><label class="field"><span>视频链接</span><input name="url" required maxlength="3000" placeholder="粘贴 YouTube、哔哩哔哩或 b23.tv 链接" autocomplete="off" autofocus></label><p class="metadata">网站自动识别原语言字幕；没有可用字幕时尝试本机语音转录，再由 AI 直接制作中文笔记，不需要视频提供中文字幕。B站分 P 请打开要学的那一集后复制链接。资料会发送给已配置的模型，并使用当前额度。</p><label class="source-choice"><input type="checkbox" name="detailed" checked><span>自动制作详尽笔记、脑图与复习问答<small>完成后自动核对，报告位于“质量与来源”；取消后仅生成基础总结。</small></span></label>${actions('开始自动整理','<button type="button" class="button" data-action="manual-video">手动收藏其他平台</button>')}</form>`, async form => {
@@ -530,8 +556,39 @@ function insightsPage() {
 async function refreshIntegrations() {state.integrations=await request('/api/integrations/status');return state.integrations;}
 async function aiSettings() {
   const status=await refreshIntegrations();
-  showModal('连接你的 AI 工具','优先使用本机 DeepSeek Harness，也可切换到官方 DeepSeek API。连接凭据只保存在本机 .local，导出备份不包含凭据。',`<div class="notice">资料获取：原语言字幕优先；${status.transcription?.ready ? '本机语音转录已启用（'+esc(status.transcription.model)+'）' : '可运行项目中的“安装本机转录.command”启用无字幕转录'}。中文笔记由 AI 直接整理。</div><div class="notice">Harness：${status.harness.configured ? '已连接 '+esc(status.harness.model.model || '')+' · '+esc(status.harness.baseUrl) : '尚未连接'}<div class="button-row" style="margin-top:10px"><button class="button small" data-action="harness-connect">${status.harness.configured?'更新连接':'连接 Harness'}</button><button class="button small" data-action="harness-check">检查连接</button></div></div>${status.security?.requestToken?'<details class="notice"><summary>本机安全保护已启用</summary><p>写入令牌与来源校验、跨站读取拦截、页面防嵌入、外部资料白名单及请求限流已开启。</p><p>适用于本机单用户。个人资料与密钥留在本机；对外部署需要单独设计身份认证与 HTTPS。</p></details>':''}<details class="notice"><summary>智能省 token 与用量</summary><p>已校验模块与译文按内容复用；长资料分段保留完整覆盖，自查仍独立运行。</p><p>已复用 ${Number(status.aiEfficiency?.cacheHits || 0).toLocaleString()} 次，避免重复发送 ${Number(status.aiEfficiency?.avoidedInputCharacters || 0).toLocaleString()} 个输入字符。</p><p>${status.aiEfficiency?.usageReports ? '接口已报告 '+Number(status.aiEfficiency.promptTokens || 0).toLocaleString()+' 个输入 token、'+Number(status.aiEfficiency.completionTokens || 0).toLocaleString()+' 个输出 token（仅含已报告请求）。' : '当前接口尚未报告 token 用量，字符统计不等于实际 token 或账单。'}</p></details><form><label class="source-choice"><input name="smartCache" type="checkbox"${status.aiEfficiency?.enabled===false?'':' checked'}><span>智能省 token<small>默认开启：复用校验通过的相同请求；关闭后，新请求不读取结果缓存。已保存笔记和译文仍保留。</small></span></label><label class="field"><span>整理时使用</span><select name="mode"><option value="harness"${status.ai.mode==='harness'?' selected':''}>本机 DeepSeek Harness</option><option value="deepseek"${status.ai.mode==='deepseek'?' selected':''}>DeepSeek 官方 API</option></select></label>${harnessModelFields(status.harness)}<label class="field"><span>官方 API 模型（仅 API 模式使用）</span><input name="model" maxlength="100" value="${esc(status.ai.model)}"></label><label class="field"><span>DeepSeek API Key（仅 API 模式使用）</span><input name="apiKey" type="password" autocomplete="new-password" placeholder="${status.ai.hasApiKey?'已保存；留空保留现有密钥':'选择 Harness 时无需填写'}"><small>API 模式请求发送到 api.deepseek.com，费用由你的 DeepSeek 账户承担。</small></label>${actions('保存 AI 设置')}</form>`,async form=>{state.integrations=await post('/api/integrations/ai',{mode:form.get('mode'),model:form.get('model'),apiKey:form.get('apiKey'),smartCache:form.get('smartCache')==='on',...(form.get('mode')==='harness' && status.harness.configured ? {harnessModel:{...JSON.parse(form.get('harnessModel')),...(form.get('harnessEffort')?{reasoningEffort:form.get('harnessEffort')}:{})}} : {})});renderAll();toast('AI 设置已保存');});
-  bindHarnessModelFields(modal.querySelector('form'),status.harness.catalog);
+  showModal('选择你的 AI','选择模型后保存，新任务会使用你的选择。连接凭据只留在本机。',`
+    <form>
+      <label class="field"><span>整理时使用</span><select name="mode" aria-label="整理时使用">
+        <option value="harness"${status.ai.mode==='harness'?' selected':''}>本机 DeepSeek Harness</option>
+        <option value="deepseek"${status.ai.mode==='deepseek'?' selected':''}>DeepSeek 官方 API</option>
+      </select></label>
+      <div data-ai-mode="harness"${status.ai.mode==='harness'?'':' hidden'}>
+        <p class="metadata">${status.harness.configured?'Harness 已连接':'先连接终端中的 Harness，才能读取你的模型目录。'}</p>
+        <button type="button" class="button small" data-action="harness-connect">${status.harness.configured?'更新 Harness 连接':'连接 Harness'}</button>
+        ${harnessModelFields(status.harness)}
+      </div>
+      <div data-ai-mode="deepseek"${status.ai.mode==='deepseek'?'':' hidden'}>
+        <label class="field"><span>官方 API 模型</span><input name="model" maxlength="100" value="${esc(status.ai.model)}"></label>
+        <label class="field"><span>DeepSeek API Key</span><input name="apiKey" type="password" autocomplete="new-password" placeholder="${status.ai.hasApiKey?'已保存；留空保留现有密钥':'填写你的 DeepSeek API Key'}"><small>请求发送到 api.deepseek.com，费用由你的 DeepSeek 账户承担。</small></label>
+      </div>
+      <label class="source-choice"><input name="smartCache" type="checkbox"${status.aiEfficiency?.enabled===false?'':' checked'}><span>智能省 token<small>复用校验通过的相同请求；已保存的笔记和译文保留。</small></span></label>
+      <details class="notice"><summary>用量、资料获取与本机保护</summary>
+        <p>已复用 ${Number(status.aiEfficiency?.cacheHits || 0).toLocaleString()} 次，避免重复发送 ${Number(status.aiEfficiency?.avoidedInputCharacters || 0).toLocaleString()} 个输入字符。</p>
+        <p>${status.aiEfficiency?.usageReports?'接口报告 '+Number(status.aiEfficiency.promptTokens || 0).toLocaleString()+' 个输入 token、'+Number(status.aiEfficiency.completionTokens || 0).toLocaleString()+' 个输出 token（仅含已报告请求）。':'当前接口尚未报告 token 用量，字符数不等于账单 token 数。'}</p>
+        <p>原语言字幕优先；${status.transcription?.ready?'本机语音转录已启用（'+esc(status.transcription.model)+'）':'可运行“安装本机转录.command”启用无字幕转录'}。</p>
+        ${status.security?.requestToken?'<p>本机单用户保护已启用：来源检查、写入令牌、页面防嵌入及请求限流。个人资料与密钥不进入公开源码。</p>':''}
+      </details>
+      ${actions('保存 AI 设置')}
+    </form>`,async form=>{
+      const harnessModel=form.get('mode')==='harness' && status.harness.configured ? {...JSON.parse(form.get('harnessModel')),...(form.get('harnessEffort')?{reasoningEffort:form.get('harnessEffort')}:{})} : null;
+      state.integrations=await post('/api/integrations/ai',{mode:form.get('mode'),model:form.get('model'),apiKey:form.get('apiKey'),smartCache:form.get('smartCache')==='on',...(harnessModel?{harnessModel}:{})});
+      renderAll();toast('AI 设置已保存');
+    });
+  const form=modal.querySelector('form');
+  bindHarnessModelFields(form,status.harness.catalog);
+  form.elements.namedItem('mode').addEventListener('change',event=>{
+    form.querySelectorAll('[data-ai-mode]').forEach(section=>{section.hidden=section.dataset.aiMode!==event.target.value;});
+  });
 }
 function harnessConnectModal() {
   showModal('连接终端里的 Harness','在运行 dsh web 的终端复制最新的完整启动链接。它用于取得本机连接，保存后不会显示 token。',`<form><label class="field"><span>Harness 启动链接</span><input name="url" type="password" required autocomplete="off" placeholder="http://127.0.0.1:3080/?token=…"></label>${actions('连接并检查模型')}</form>`,async form=>{state.integrations=await post('/api/integrations/harness/connect',{url:form.get('url')});renderAll();setTimeout(()=>aiSettings().catch(e=>toast(e.message)),0);toast('Harness 已连接');});
@@ -597,7 +654,10 @@ document.addEventListener('click',async event=>{
   const button=event.target.closest('[data-action]');if(!button||button.disabled) return;
   const {action,id}=button.dataset;
   try {
-    if(action==='ai-settings') await aiSettings();
+    if(action==='task-refresh') {button.disabled=true;await refreshTasks();renderMain();}
+    else if(action==='task-filter') {state.tasksFilter=button.dataset.filter;renderMain();}
+    else if(action==='task-resume') {button.disabled=true;const result=await post('/api/tasks/resume',{videoId:id});state.library=result.library;await refreshTasks();renderAll();toast(result.duplicate?'这门课已在整理队列中':'已从保存的进度继续整理');}
+    else if(action==='ai-settings') await aiSettings();
     else if(action==='harness-connect') harnessConnectModal();
     else if(action==='harness-check') {button.disabled=true;await post('/api/integrations/harness/check');await aiSettings();toast('模型列表已更新，已保存的选择保持不变');}
     else if(action==='ai-summary') {
@@ -709,6 +769,7 @@ setInterval(async () => {
     const latest=await request('/api/library');
     if (latest.revision !== state.library.revision) {
       state.library=latest;await refreshPractice();route();
+    } else if(state.view==='tasks') {await refreshTasks();renderMain();
     }
   } catch { /* 暂时断开时保留当前页面与未提交数据。 */ }
 }, 4000);
