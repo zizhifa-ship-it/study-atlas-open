@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import HTTPCookieProcessor, ProxyHandler, Request, build_opener, urlopen
 from ai_efficiency import compact_json, validated_request, efficiency_status, record_model_call
 from security import credential_urlopen as urlopen, NoRedirect, private_name
+from harness_models import catalog_view, validate_selection
 
 
 class IntegrationError(ValueError):
@@ -79,7 +80,7 @@ class Integrations:
     def status(self):
         from transcript_sources import asr_status
         harness, ai, client, token = [self.read(n) for n in ["harness", "ai", "youtube-client", "youtube-token"]]
-        return {"harness": {"configured": bool(harness.get("cookies")), "baseUrl": harness.get("baseUrl", "http://127.0.0.1:3080"), "model": harness.get("model", {})},
+        return {"harness": {"configured": bool(harness.get("cookies")), "baseUrl": harness.get("baseUrl", "http://127.0.0.1:3080"), "model": harness.get("model", {}), "catalog": harness.get("catalog", {"groups": []})},
                 "ai": {"mode": ai.get("mode", "harness"), "model": ai.get("model", "deepseek-flash"), "hasApiKey": bool(ai.get("apiKey"))},
                 "youtube": {"configured": bool(client.get("client_id")), "connected": bool(token.get("access_token")), "scope": "youtube.readonly"}, "transcription": asr_status(self.root), "aiEfficiency": efficiency_status(self)}
 
@@ -112,6 +113,14 @@ class Integrations:
         return result.get("value")
 
     def connect_harness(self, launch_url):
+        if not self.lock.acquire(blocking=False):
+            raise IntegrationError('AI 任务正在运行，请完成后修改连接或模型')
+        try:
+            return self._connect_harness(launch_url)
+        finally:
+            self.lock.release()
+
+    def _connect_harness(self, launch_url):
         try:
             parsed = urlsplit(launch_url.strip())
             valid = parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"} and not parsed.username and not parsed.password and parsed.port is not None
@@ -131,8 +140,10 @@ class Integrations:
         except (HTTPError, URLError, OSError):
             raise IntegrationError("Harness 启动链接无效或服务未运行，请检查终端最新链接")
         config["cookies"] = [{key:getattr(c,key) for key in ["name","value","domain","path","secure","expires"]} for c in jar]
-        catalog = self.rpc(config, "session/modelCatalog", {})
-        config["model"] = catalog["default"]
+        catalog = catalog_view(self.rpc(config, "session/modelCatalog", {}))
+        previous = self.read('harness')
+        config['catalog'] = catalog
+        config["model"] = previous.get('model') if previous.get('baseUrl') == base and previous.get('model') else catalog['default']
         self.write("harness", config)
         ai = self.read("ai")
         ai["mode"] = "harness"
@@ -140,15 +151,33 @@ class Integrations:
         return self.status()
 
     def check_harness(self):
+        if not self.lock.acquire(blocking=False):
+            raise IntegrationError('AI 任务正在运行，请完成后刷新模型列表')
+        try:
+            return self._check_harness()
+        finally:
+            self.lock.release()
+
+    def _check_harness(self):
         config = self.read("harness")
         if not config.get("cookies"):
             raise IntegrationError("请先连接本机 Harness")
-        catalog = self.rpc(config, "session/modelCatalog", {})
-        config["model"] = catalog["default"]
+        catalog = catalog_view(self.rpc(config, "session/modelCatalog", {}))
+        config['catalog'] = catalog
+        if not config.get('model'):
+            config['model'] = catalog['default']
         self.write("harness", config)
-        return {"ok":True, "model":catalog["default"], "providers":[g["name"] for g in catalog.get("groups",[])]}
+        return {"ok":True, "model":config['model'], 'catalog': catalog}
 
     def save_ai(self, data):
+        if not self.lock.acquire(blocking=False):
+            raise IntegrationError('AI 任务正在运行，请完成后修改 AI 设置')
+        try:
+            return self._save_ai(data)
+        finally:
+            self.lock.release()
+
+    def _save_ai(self, data):
         if data.get("mode") not in {"harness", "deepseek"}:
             raise IntegrationError("请选择 Harness 或 DeepSeek API")
         current = self.read("ai")
@@ -162,6 +191,17 @@ class Integrations:
             current["apiKey"] = key
         if data.get("clearApiKey"):
             current.pop("apiKey", None)
+        if data.get('mode') == 'harness' and 'harnessModel' in data:
+            harness = self.read('harness')
+            if not harness.get('cookies'):
+                raise IntegrationError('请先连接本机 Harness')
+            catalog = catalog_view(self.rpc(harness, 'session/modelCatalog', {}))
+            try:
+                selected = validate_selection(catalog, data['harnessModel'])
+            except ValueError as exc:
+                raise IntegrationError(str(exc))
+            harness.update(model=selected, catalog=catalog)
+            self.write('harness', harness)
         self.write("ai", current)
         return self.status()
 
@@ -169,14 +209,22 @@ class Integrations:
         config = self.read("harness")
         if not config.get("cookies"):
             raise IntegrationError("请先连接本机 Harness")
+        catalog = catalog_view(self.rpc(config, 'session/modelCatalog', {}))
+        try:
+            selected = validate_selection(catalog, config.get('model') or catalog['default'])
+        except ValueError as exc:
+            raise IntegrationError(str(exc))
         workspace = self.local / "harness-workspace"
         workspace.mkdir(mode=0o700, exist_ok=True)
         session = self.rpc(config, "session/create", {"request":{"cwd":str(workspace), "agentPreset":"minimal"}})
         sid = session["sessionId"]
-        self.rpc(config, "session/rename", {"request":{"sessionId":sid,"title":"学习图谱 · 知识整理"}})
-        self.rpc(config, "session/prompt", {"request":{"sessionId":sid, "requestId":str(uuid.uuid4()), "mode":"queue", "content":[{"type":"text","text":prompt}], "clientTimeZone":"Asia/Shanghai"}})
         deadline, last_seq = time.monotonic() + 600, -1
         try:
+            applied = self.rpc(config, 'session/selectModel', {'request': dict(selected, sessionId=sid)})
+            if applied.get('selected') != selected:
+                raise IntegrationError('Harness 确认的模型与所选模型不同，已停止发送学习资料，请刷新模型列表')
+            self.rpc(config, "session/rename", {"request":{"sessionId":sid,"title":"学习图谱 · 知识整理"}})
+            self.rpc(config, "session/prompt", {"request":{"sessionId":sid, "requestId":str(uuid.uuid4()), "mode":"queue", "content":[{"type":"text","text":prompt}], "clientTimeZone":"Asia/Shanghai"}})
             while time.monotonic() < deadline:
                 projection = self.rpc(config, "session/projections", {"request":{"sessionId":sid}})
                 seq = projection.get("asOfSeq", 0) if projection else 0
@@ -197,7 +245,7 @@ class Integrations:
                         text = "\n".join(p.get("text","") for p in message.get("content",[]) if p.get("type") == "text")
                         if not text.strip():
                             raise IntegrationError("Harness 返回了空内容，请在 Harness 中检查模型状态")
-                        result = {"content":text, "model":config.get("model",{}).get("model", "Harness"), "provider":"harness", "sessionId":sid, "usage":messages[-1].get("usage",{})}
+                        result = {"content":text, "model":selected['model'], "provider":"harness", 'modelSelection': selected, "sessionId":sid, "usage":messages[-1].get("usage",{})}
                         record_model_call(self, prompt, result)
                         return result
                 time.sleep(1)
