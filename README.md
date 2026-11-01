@@ -2,6 +2,8 @@
 
 [English](README.en.md)
 
+> **许可政策：非商业用途免费；受新许可约束的新增内容，商业用途须向 [zizhifa-ship-it](https://github.com/zizhifa-ship-it) 申请、获得书面许可并按约付费。** [申请与收费说明](COMMERCIAL-LICENSE.md) · [提交申请](https://github.com/zizhifa-ship-it/study-atlas-open/issues/new?template=commercial-license.yml)。已按 MIT 发布的旧版及其代码保留原权利，详见下方许可说明。
+
 一个适合初学者阅读和修改的视频学习知识库。按 **分类 → 视频 → 笔记** 整理学习资料；主入口只需粘贴公开视频链接。
 
 - 粘贴公开 YouTube、哔哩哔哩或 b23.tv 链接，自动识别标题和作者、读取原语言字幕或本机语音转录、AI 分类并写笔记，保存到本机。
@@ -26,7 +28,7 @@
 - 比较多条视频的共通规律、差异和适用条件，归纳可复用经验并保留来源。
 - 可选：通过 YouTube 官方只读授权读取自己的频道和播放列表；粘贴链接不需要账号授权。
 
-默认提供通用学习分类和空白视频库。首次启动时自动从 `data/library.example.json` 创建本机数据文件。源码采用 MIT 许可证，个人学习资料与连接凭据不提交。
+默认提供通用学习分类和空白视频库。首次启动时自动从 `data/library.example.json` 创建本机数据文件。许可及商业申请见 [LICENSE](LICENSE) 与 [商业许可说明](COMMERCIAL-LICENSE.md)，个人学习资料与连接凭据不提交。
 
 ## Windows、macOS、Linux 启动
 
@@ -129,7 +131,7 @@ study-atlas/
 
 从 [从零开发教程](docs/从零开发.md) 开始，先学分类，再学视频，最后学笔记和 Git。每个阶段都有一个可以动手完成的小练习。
 
-本项目可以公开开源。`data/library.json`、`.local/`、自动备份、临时文件和完整视频都在 `.gitignore` 中。不要使用 `git add -f` 强制添加这些个人资料。示例数据只放在 `data/library.example.json`，不含真实账号或个人视频收藏。
+本项目公开源码，采用非商业免费、商业另行授权的政策；不是 OSI 定义的开源许可。`data/library.json`、`.local/`、自动备份、临时文件和完整视频都在 `.gitignore` 中。不要使用 `git add -f` 强制添加这些个人资料。示例数据只放在 `data/library.example.json`，不含真实账号或个人视频收藏。
 
 GitHub 普通仓库会阻止超过 100 MiB 的单个文件，所以这里收录视频链接。需要管理完整视频时，可以另设本地视频目录或对象存储。[GitHub 大文件说明](https://docs.github.com/en/repositories/working-with-files/managing-large-files/about-large-files-on-github)
 
@@ -151,7 +153,7 @@ python3 -m unittest discover -s tests -v
 
 在课程详情选择语言后，PDF、无边记素材包、脑图 SVG 按当前版本导出。全库 PDF 默认中文；Markdown 按每门课当前选择的语言导出，JSON 备份保存全部已生成版本。
 
-可选本机转录需要 Python 3.10 以上、`yt-dlp` 及 Node.js。在 Mac 上运行 `安装本机转录.command`，或执行 `python3 tools/setup_transcription.py`。它使用独立 `.venv-asr` 环境、faster-whisper 和多语言 base 模型，模型首次下载后在本机推理；其他系统可用同一 Python 安装脚本。处理速度与准确性取决于设备、语言和音轨，术语或代码可能误识别。模型、缓存和音轨不属于开源代码。
+可选本机转录需要 Python 3.10 以上、`yt-dlp` 及 Node.js。在 Mac 上运行 `安装本机转录.command`，或执行 `python3 tools/setup_transcription.py`。它使用独立 `.venv-asr` 环境、faster-whisper 和多语言 base 模型，模型首次下载后在本机推理；其他系统可用同一 Python 安装脚本。处理速度与准确性取决于设备、语言和音轨，术语或代码可能误识别。模型、缓存和音轨不属于公开源码。
 
 详细使用说明见 [笔记、翻译与来源](docs/笔记翻译与资料来源.md)。
 
@@ -161,7 +163,7 @@ B站支持 BV/av 长链接、b23.tv 短链接及常见分享文本。可读取�
 
 视频卡片显示真实封面。整理后另生成最多三处原视频画面，可点击时间返回对应位置。字幕或转录能把模块依据定位到时间点时，画面会关联该模块；否则明确标为“视频画面”，不会伪装成 AI 已识别画面内容。画面提取只读取所需的视频片段，不保存完整视频，不改变系统代理、DNS、浏览器和原网站播放设置。需要可选本机转录环境中的 PyAV。
 
-图文导学会随单课 PDF 和无边记图片包导出。个人封面、截图、音轨缓存均留在 `.local/`，不进入开源仓库。JSON 备份保留图文索引，换电脑后可重新生成画面；PDF 和无边记素材包中的图片已经嵌入。
+图文导学会随单课 PDF 和无边记图片包导出。个人封面、截图、音轨缓存均留在 `.local/`，不进入公开仓库。JSON 备份保留图文索引，换电脑后可重新生成画面；PDF 和无边记素材包中的图片已经嵌入。
 
 平台未提供可访问的字幕和音轨时，保留链接并提示补充转录，不凭标题生成正文。详情见 [哔哩哔哩与图文笔记](docs/哔哩哔哩与图文笔记.md)。
 
@@ -174,3 +176,10 @@ B站支持 BV/av 长链接、b23.tv 短链接及常见分享文本。可读取�
 写入接口使用每次服务启动更新的防伪造令牌，并校验 Host、Origin 和 Fetch Metadata；跨站 API 读取、页面嵌入、异常 JSON 和高频任务受到限制。平台资料重定向限制在白名单，带凭据的官方请求不跟随重定向，私有配置与备份限制路径和文件权限。旧 API 脚本需先读取 `/api/security`，网页已自动适配。
 
 本项目仍面向本机单用户；对外部署需要另行设计身份认证、HTTPS 和服务隔离。安全边界、限制与测试见 [安全与隐私](docs/安全与隐私.md)。
+
+## 许可与商业使用
+
+- 新增原创内容在维护者有权授权的范围内采用 [Study Atlas 非商业源码许可](LICENSE)，非商业用途免费；商业用途须先申请，取得书面许可并按约付费。金额和范围由维护者单独确定。
+- [商业许可说明与申请流程](COMMERCIAL-LICENSE.md)；[提交申请](https://github.com/zizhifa-ship-it/study-atlas-open/issues/new?template=commercial-license.yml)。申请、赞助或单独付款均不自动授权。
+- **旧 MIT 权利保留**：截至提交 `7bcb7e431bc6a7f1725cbab534906afbb7f7285e` 的代码、文档及后续保留的该部分仍适用 [原 MIT 许可](LICENSE-MIT-LEGACY)，包括其商业使用权。当前主要功能已在旧版中发布，本次变更不能追溯收回或收费。
+- 商业用途受限的新许可属于源码公开许可，不属于 OSI 定义的开源许可；第三方组件、视频及用户自己的内容分别适用其原有权利。
