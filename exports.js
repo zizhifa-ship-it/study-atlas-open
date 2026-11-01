@@ -10,7 +10,7 @@ export function libraryMarkdown(library, languages={}) {
     lines.push('#'.repeat(Math.min(depth,6))+' '+md(c.name),'',c.description || '','');
     for(const original of library.videos.filter(v=>v.categoryId===c.id)) {
       const v=localizedVideo(original,languages[original.id] || 'zh-CN');
-      lines.push(`### [${md(v.aiTitle || v.title)}](<${link(v.url)}>)`,'',`- 作者：${md(v.author || '未填写')}`,`- 状态：${status[v.status]}`,`- 标签：${(v.tags || []).map(md).join('、') || '无'}`,'');
+      lines.push(v.url.startsWith('studyatlas://material/')?`### ${md(v.aiTitle || v.title)}（本地资料）`:`### [${md(v.aiTitle || v.title)}](<${link(v.url)}>)`,'',`- 作者：${md(v.author || '未填写')}`,`- 状态：${status[v.status]}`,`- 标签：${(v.tags || []).map(md).join('、') || '无'}`,'');
       if(v.summary) {const c=cornellData(v);lines.push('#### 康奈尔笔记','','**提示与问题**','',...c.cues.map(q=>'- '+q),'','**课堂记录**','',v.summary,'','**归纳小结**','',c.summary,'');}
       const k=v.knowledge;
       if(k) {
@@ -36,7 +36,7 @@ export function libraryMarkdown(library, languages={}) {
     for(const child of library.categories.filter(x=>x.parentId===c.id)) addCategory(child,depth+1);
   }
   for(const c of library.categories.filter(c=>c.parentId===null)) addCategory(c,2);
-  for(const i of library.insights || []) lines.push('## '+md(i.title),'',i.content,'',...i.sources.map(s=>`- [${md(s.source+' '+s.title)}](<${link(s.url)}>)`),'');
+  for(const i of library.insights || []) lines.push('## '+md(i.title),'',i.content,'',...i.sources.map(s=>s.url.startsWith('studyatlas://material/')?`- ${md(s.source+' '+s.title)}（本地资料）`:`- [${md(s.source+' '+s.title)}](<${link(s.url)}>)`),'');
   if(library.learning?.attempts.length) {
     lines.push('## 自测与复习记录','','以下为个人作答及 AI 反馈，请自行保管。','');
     for(const a of library.learning.attempts) lines.push('### '+md(a.question),'',a.createdAt+' · '+(a.score===null?'不计分':a.score+' 分')+(a.assisted?' · 参考后作答':''),'','**我的答案**','',a.answer,'','**AI 反馈**','',a.feedback,'','**参考改写**','',a.suggestedAnswer,'','**下次复习**：'+(a.dueAt || '未更新'),'');
