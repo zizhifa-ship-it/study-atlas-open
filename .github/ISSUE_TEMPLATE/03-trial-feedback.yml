@@ -1,0 +1,28 @@
+name: 试用反馈 / First-use feedback
+description: 无需懂代码，告诉我们试用是否顺利 / Share your first-use experience.
+title: "[试用反馈 / Feedback] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        不需要写技术报告，几句话就有帮助。此页面公开可见，请勿上传私人笔记或账号凭据。
+        A few sentences are enough. This page is public; keep personal notes and credentials private.
+  - type: dropdown
+    id: result
+    attributes:
+      label: 你试到了哪一步？ / How far did you get?
+      options:
+        - 还没成功启动 / Could not start
+        - 已启动，正在尝试导入 / Started, trying import
+        - 已读到示例或自己的笔记 / Read sample or personal notes
+        - 已连接模型并完成笔记 / Generated notes with my model
+        - 已导出或开始复习 / Exported or reviewed
+    validations:
+      required: true
+  - type: textarea
+    id: experience
+    attributes:
+      label: 哪一步最有用，哪一步最不顺？ / What helped, and what was confusing?
+      description: 也可以说说最想改的一件事。 / One useful part, one difficulty, or one desired improvement.
+    validations:
+      required: true
