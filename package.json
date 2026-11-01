@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "A local-first learning video library with AI notes and source-backed synthesis.",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "start": "python3 server.py --open",
     "test": "python3 -m unittest discover -s tests -v",
