@@ -58,3 +58,14 @@
 [data-ai-mode][hidden] {display:none !important;}
 [data-ai-mode]>fieldset {margin:16px 0;min-width:0;}
 @media(max-width:760px) {.task-grid {grid-template-columns:1fr;}.task-overview {gap:8px;}.task-overview>div {padding:14px 10px;}.task-overview strong {font-size:25px;}.task-overview span {font-size:11px;}}
+.setup-steps {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:24px 0;align-items:stretch;}
+.setup-steps .panel {margin:0;min-width:0;padding:22px;}
+.setup-steps h2 {font-size:20px;line-height:1.6;}
+.setup-steps p {font-size:14px;line-height:1.9;color:var(--muted);}
+.setup-checks {display:grid;gap:12px;margin-top:22px;}
+.setup-checks article {display:flex;align-items:flex-start;gap:15px;border-top:1px solid var(--line);padding:16px 0;}
+.setup-checks .task-badge {flex-shrink:0;}
+.setup-checks h3 {font-size:15px;margin:0 0 7px;}
+.setup-checks p {font-size:13px;line-height:1.8;margin:0;color:var(--muted);}
+.first-run p {line-height:1.8;color:var(--muted);}
+@media(max-width:900px) {.setup-steps {grid-template-columns:1fr;}.setup-checks article {gap:10px;}}
