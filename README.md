@@ -4,7 +4,15 @@
 
 > **许可政策：非商业用途免费；受新许可约束的新增内容，商业用途须向 [zizhifa-ship-it](https://github.com/zizhifa-ship-it) 申请、获得书面许可并按约付费。** [申请与收费说明](COMMERCIAL-LICENSE.md) · [提交申请](https://github.com/zizhifa-ship-it/study-atlas-open/issues/new?template=commercial-license.yml)。已按 MIT 发布的旧版及其代码保留原权利，详见下方许可说明。
 
-一个适合初学者阅读和修改的视频学习知识库。按 **分类 → 视频 → 笔记** 整理学习资料；主入口只需粘贴公开视频链接。
+## 简介 / Overview
+
+一个在自己电脑运行的 AI 学习知识库，适合初学者阅读和修改。按 **分类 → 视频或课堂资料 → 笔记** 整理内容：粘贴 YouTube / 哔哩哔哩链接，或导入文字、Markdown、字幕，连接自己选择的模型，生成知识模块、康奈尔笔记、脑图、翻译和复习题；支持 PDF / iPad 无边记导出与 JSON 备份。界面目前主要使用简体中文。
+
+A local-first AI learning library designed for beginners to explore and customize. Organize **categories → videos or class materials → notes**: paste YouTube / Bilibili links or import text, Markdown and captions, connect your preferred model, and create knowledge modules, Cornell notes, mind maps, translations and review questions. Export PDF / iPad Freeform materials and JSON backups. The interface is currently primarily Simplified Chinese. See the [English guide](README.en.md) for installation and details.
+
+> **License:** Noncommercial use is free. Commercial use of newly licensed material requires prior written permission and agreed fees; previously MIT-licensed material retains its original rights. [Licensing policy and application](COMMERCIAL-LICENSE.md).
+
+## 主要功能 / Key features
 
 - 粘贴公开 YouTube、哔哩哔哩或 b23.tv 链接，自动识别标题和作者、读取原语言字幕或本机语音转录、AI 分类并写笔记，保存到本机。
 - 优先归入现有分类，没有合适分类时由 AI 建立新分类；支持手动调整多级目录。
