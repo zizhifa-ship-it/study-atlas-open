@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+<title id="title">学习图谱 Study Atlas — 视频与课堂资料，变成可复习的知识</title>
+<desc id="desc">功能示意：导入视频或文字，连接自己的模型，阅读康奈尔笔记和脑图，再导出或复习。下方内容是预置教学示例，不是实时 AI 输出。</desc>
+<defs><style>text{font-family:"Noto Sans CJK SC","Microsoft YaHei","PingFang SC",sans-serif;fill:#233c31}.small{font-size:15px;fill:#667568}.body{font-size:18px}.line{fill:none;stroke:#a7b7a7;stroke-width:2}</style></defs>
+<rect width="1200" height="630" rx="24" fill="#f4f5ed"/>
+<rect x="40" y="38" width="48" height="48" rx="14" fill="#305543"/>
+<path d="M52 51h10q5-2 10 0h5v22h-7q-5-2-8 0H52z" fill="#eff1df"/>
+<path d="M64 52v20" stroke="#305543" stroke-width="2"/>
+<text x="104" y="62" font-size="27" font-weight="700">学习图谱 · Study Atlas</text>
+<text x="104" y="84" class="small">Local-first learning · Your materials, your model</text>
+<rect x="938" y="40" width="220" height="34" rx="17" fill="#e4eadc"/>
+<text x="958" y="63" class="small">源码公开 · 邀请试用 / BETA</text>
+<text x="42" y="143" font-size="35" font-weight="700">让收藏，变成可以复习的知识。</text>
+<text x="44" y="175" font-size="18" fill="#667568">Turn videos and class materials into notes you can revisit.</text>
+<rect x="40" y="207" width="288" height="325" rx="20" fill="#fff" stroke="#e0e5da"/>
+<text x="62" y="239" class="small">01 / IMPORT</text><text x="62" y="273" font-size="25" font-weight="700">从一份资料开始</text>
+<rect x="62" y="294" width="244" height="41" rx="9" fill="#f3f5ef"/>
+<text x="76" y="320" class="body">YouTube · 哔哩哔哩</text>
+<rect x="62" y="347" width="244" height="41" rx="9" fill="#f3f5ef"/>
+<text x="76" y="373" class="body">课堂文字 · Markdown</text>
+<text x="62" y="423" class="body">连接自己选择的模型</text>
+<text x="62" y="453" class="small">Harness / DeepSeek / 兼容接口</text>
+<text x="62" y="494" class="small">无密钥也能先阅读预置示例</text>
+<path d="M339 366h22m-8-7 8 7-8 7" class="line"/>
+<rect x="372" y="207" width="450" height="325" rx="20" fill="#fff" stroke="#e0e5da"/>
+<text x="394" y="239" class="small">02 / CORNELL NOTES</text><text x="394" y="273" font-size="25" font-weight="700">提示、记录、归纳小结</text>
+<rect x="394" y="294" width="406" height="155" rx="8" fill="#f7f8f2"/>
+<path d="M526 294v155" stroke="#d7dfd2"/>
+<text x="408" y="321" font-size="16" font-weight="700">提示与问题</text>
+<text x="408" y="356" class="small">IP 负责什么？</text><text x="408" y="383" class="small">DHCP 呢？</text>
+<text x="544" y="321" font-size="16" font-weight="700">课堂记录</text>
+<text x="544" y="356" class="small">IP 地址参与网络寻址。</text>
+<text x="544" y="383" class="small">DHCP 帮助设备自动获取</text><text x="544" y="410" class="small">地址及其他网络配置。</text>
+<rect x="394" y="460" width="406" height="47" rx="8" fill="#e9eedf"/>
+<text x="408" y="489" font-size="15">归纳小结：寻址、配置与可靠传输，各有分工。</text>
+<path d="M833 366h22m-8-7 8 7-8 7" class="line"/>
+<rect x="866" y="207" width="294" height="325" rx="20" fill="#fff" stroke="#e0e5da"/>
+<text x="888" y="239" class="small">03 / CONNECT &amp; REVIEW</text><text x="888" y="273" font-size="25" font-weight="700">连成图，记得住</text>
+<path d="M940 355h28v-29h21m-21 29v32h21" class="line"/>
+<rect x="884" y="335" width="61" height="40" rx="10" fill="#305543"/>
+<text x="896" y="360" font-size="16" style="fill:white">网络</text>
+<rect x="988" y="306" width="147" height="40" rx="10" fill="#e8edde"/>
+<text x="1001" y="331" font-size="16">IP 与 DHCP</text>
+<rect x="988" y="368" width="147" height="40" rx="10" fill="#e8edde"/>
+<text x="1001" y="393" font-size="16">TCP 与 UDP</text>
+<text x="888" y="452" class="body">脑图 · 自测 · 批注</text><text x="888" y="484" class="small">PDF / Markdown / iPad 无边记</text>
+<text x="42" y="570" font-size="17" font-weight="700">github.com/zizhifa-ship-it/study-atlas-open</text>
+<text x="42" y="602" font-size="14" fill="#667568">功能示意 · 预置公开教学示例，非实时 AI 输出。AI、平台读取与导出依赖按需配置。</text>
+</svg>
