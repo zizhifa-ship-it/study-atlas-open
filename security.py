@@ -1,11 +1,18 @@
 """本机 Web 边界、请求限流、凭据重定向与受限公开资源读取。"""
 import json
+import os
 import re
 import threading
 import time
 from collections import deque
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
+
+
+def private_fd_mode(fd):
+    """Unix 设置仅本人读写；Windows 临时文件继承目录 ACL，不调用不存在的 fchmod。"""
+    change_mode = getattr(os, 'fchmod', None)
+    if callable(change_mode): change_mode(fd, 0o600)
 
 SECURITY_HEADERS = {
     'Content-Security-Policy': "default-src 'self'; script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.ytimg.com https://*.hdslb.com; font-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
