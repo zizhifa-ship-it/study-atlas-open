@@ -26,7 +26,9 @@ class DemoAI(PracticeAI):
     def read(self,name):return self.translator.read(name)
     def write(self,name,value):self.translator.write(name,value)
     def status(self):
-        return {"ai":dict({'mode':'harness','model':'mock-model','hasApiKey':False},**self.read('ai')),"harness":dict(configured=True,**{k:v for k,v in self.read('harness').items() if k!='cookies'}),"youtube":{"configured":False,"connected":False}}
+        return Integrations.status(self)
+    def compatible_models(self,profile=None):return {'models':[{'id':'local-model','name':'测试本机模型'}]}
+    def compatible_generate(self,prompt):return self.harness_generate(prompt)
     def rpc(self,config,method,args):return CATALOG
     def check_harness(self):return Integrations.check_harness(self)
     def _check_harness(self):return Integrations._check_harness(self)
