@@ -1,3 +1,4 @@
+from security import private_fd_mode
 """本机 Harness、DeepSeek API 和 YouTube 官方只读授权。凭据仅写入 .local/。"""
 import base64
 import hashlib
@@ -20,6 +21,19 @@ from urllib.request import HTTPCookieProcessor, ProxyHandler, Request, build_ope
 from ai_efficiency import compact_json, validated_request, efficiency_status, record_model_call
 from security import credential_urlopen as urlopen, NoRedirect, private_name
 from harness_models import catalog_view, validate_selection
+import compatible_ai
+
+
+def select_generator(engine):
+    mode = engine.read('ai').get('mode', 'harness')
+    return engine.compatible_generate if mode == 'compatible' else engine.deepseek_generate if mode == 'deepseek' else engine.harness_generate
+
+
+def selected_model(engine):
+    ai = engine.read('ai')
+    if ai.get('mode') == 'compatible':
+        return ai.get('compatibleProfiles', {}).get(ai.get('compatibleProvider'), {}).get('model', '')
+    return ai.get('model', '') if ai.get('mode') == 'deepseek' else engine.read('harness').get('model', {}).get('model', 'Harness')
 
 
 class IntegrationError(ValueError):
@@ -69,7 +83,7 @@ class Integrations:
         if target.is_symlink(): raise IntegrationError('私有配置不能使用符号链接')
         fd, temp = tempfile.mkstemp(prefix=".settings-", dir=self.local)
         try:
-            os.fchmod(fd, 0o600)
+            private_fd_mode(fd)
             with os.fdopen(fd, "w", encoding="utf-8") as out:
                 json.dump(data, out, ensure_ascii=False)
             os.replace(temp, target)
@@ -81,7 +95,7 @@ class Integrations:
         from transcript_sources import asr_status
         harness, ai, client, token = [self.read(n) for n in ["harness", "ai", "youtube-client", "youtube-token"]]
         return {"harness": {"configured": bool(harness.get("cookies")), "baseUrl": harness.get("baseUrl", "http://127.0.0.1:3080"), "model": harness.get("model", {}), "catalog": harness.get("catalog", {"groups": []})},
-                "ai": {"mode": ai.get("mode", "harness"), "model": ai.get("model", "deepseek-flash"), "hasApiKey": bool(ai.get("apiKey"))},
+                "ai": {"mode": ai.get("mode", "harness"), "model": ai.get("model", "deepseek-flash"), "hasApiKey": bool(ai.get("apiKey")), 'compatible': compatible_ai.public_status(ai)},
                 "youtube": {"configured": bool(client.get("client_id")), "connected": bool(token.get("access_token")), "scope": "youtube.readonly"}, "transcription": asr_status(self.root), "aiEfficiency": efficiency_status(self)}
 
     @staticmethod
@@ -178,8 +192,8 @@ class Integrations:
             self.lock.release()
 
     def _save_ai(self, data):
-        if data.get("mode") not in {"harness", "deepseek"}:
-            raise IntegrationError("请选择 Harness 或 DeepSeek API")
+        if data.get("mode") not in {"harness", "deepseek", "compatible"}:
+            raise IntegrationError("请选择 AI 接入方式")
         current = self.read("ai")
         current["mode"] = data["mode"]
         current["model"] = str(data.get("model") or "deepseek-flash")[:100]
@@ -191,6 +205,9 @@ class Integrations:
             current["apiKey"] = key
         if data.get("clearApiKey"):
             current.pop("apiKey", None)
+        if data.get('mode') == 'compatible':
+            try: compatible_ai.save_profile(current, data.get('compatible'))
+            except ValueError as exc: raise IntegrationError(str(exc))
         if data.get('mode') == 'harness' and 'harnessModel' in data:
             harness = self.read('harness')
             if not harness.get('cookies'):
@@ -276,6 +293,27 @@ class Integrations:
         record_model_call(self, prompt, answer)
         return answer
 
+    def compatible_generate(self, prompt):
+        try:
+            result = compatible_ai.generate(self.read('ai'), prompt)
+        except HTTPError as exc:
+            raise IntegrationError('兼容接口调用失败（HTTP %s），请检查所选供应商的模型、密钥与额度' % exc.code)
+        except (URLError, OSError):
+            raise IntegrationError('兼容接口连接失败，请检查本机模型服务是否开启或云端连接是否可用')
+        except ValueError as exc:
+            raise IntegrationError(str(exc) if not isinstance(exc, json.JSONDecodeError) else '兼容接口返回了无效 JSON')
+        record_model_call(self, prompt, result)
+        return result
+
+    def compatible_models(self, profile=None):
+        try:
+            import copy
+            config = copy.deepcopy(self.read('ai'))
+            if profile is not None: compatible_ai.save_profile(config, profile)
+            return {'models': compatible_ai.models(config)}
+        except (HTTPError, URLError, OSError, ValueError, TypeError):
+            raise IntegrationError('暂时无法读取模型列表，可在 AI 设置中手动填写服务提供的模型 ID')
+
     def generate(self, request, library):
         if not self.lock.acquire(blocking=False):
             raise IntegrationError("已有一个整理任务正在进行，请等它结束")
@@ -286,7 +324,7 @@ class Integrations:
                 raise IntegrationError("每次请选择 1 到 12 条视频")
             if mode not in {"summary","synthesis"} or mode == "summary" and len(ids) != 1 or mode == "synthesis" and len(ids) < 2:
                 raise IntegrationError("单条总结选 1 个视频，共通经验至少选 2 个视频")
-            generator = self.deepseek_generate if self.read("ai").get("mode", "harness") == "deepseek" else self.harness_generate
+            generator = select_generator(self)
             sources = []
             for index, vid in enumerate(ids,1):
                 v = next((v for v in library["videos"] if v["id"] == vid),None)
