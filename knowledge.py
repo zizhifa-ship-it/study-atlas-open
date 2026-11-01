@@ -1,3 +1,4 @@
+from integrations import select_generator, selected_model
 """生成详尽知识模块，并以独立模型请求复核。所有资料仅保存在个人知识库。"""
 import copy
 import hashlib
@@ -126,7 +127,7 @@ def validate_knowledge(value):
 def material_for(video):
     if len(video.get("transcript", "").strip()) >= 20:
         info = video.get('transcriptInfo') or {}
-        return video["transcript"].strip(), info.get('source') or "原始字幕"
+        return video["transcript"], info.get('source') or "原始字幕"
     notes = [n["text"] for n in video.get("notes", []) if not n["text"].startswith("旧版总结（")]
     material = "\n".join([video.get("summary", "")] + notes).strip()
     if len(material) < 20:
@@ -227,7 +228,7 @@ def build_knowledge(store, integrations, vid, progress, prepared=None, review_on
         model_key = model_identity(integrations)
         if checkpoint.get("fingerprint") != fingerprint or checkpoint.get("mode") != mode or checkpoint.get("version") != 3 or checkpoint.get('modelKey') != model_key:
             checkpoint = {"version": 3, "fingerprint": fingerprint, "mode": mode, 'modelKey': model_key}
-        generator = integrations.deepseek_generate if integrations.read("ai").get("mode", "harness") == "deepseek" else integrations.harness_generate
+        generator = select_generator(integrations)
         material = checkpoint.get("material") or (prepared if prepared is not None else prepare_material(source, generator, lambda i, n: progress("知识模块：整理资料第 %d/%d 段" % (i, n)), engine=integrations))
         checkpoint["material"] = material
         save_checkpoint()
@@ -291,7 +292,7 @@ def build_knowledge(store, integrations, vid, progress, prepared=None, review_on
                   "checkedAt": datetime.now(timezone.utc).isoformat()}
         modules = draft["modules"]
         draft.update(modules=modules, review=review, materialKind=kind, materialHash=fingerprint,
-                     model=integrations.status().get("ai", {}).get("model", "") if integrations.read("ai").get("mode") == "deepseek" else integrations.read("harness").get("model", {}).get("model", "Harness"))
+                     model=selected_model(integrations))
         knowledge = validate_knowledge(draft)
     finally:
         integrations.lock.release()
