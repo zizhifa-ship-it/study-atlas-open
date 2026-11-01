@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 安装与首次试用 / Installation and first try
+    url: https://github.com/zizhifa-ship-it/study-atlas-open/blob/main/docs/试用与反馈.md
+    about: 下载、启动、无密钥示例和反馈入口 / Download, start, sample notes and feedback.
+  - name: 商业许可说明 / Commercial licensing
+    url: https://github.com/zizhifa-ship-it/study-atlas-open/blob/main/COMMERCIAL-LICENSE.md
+    about: 查看适用范围、旧 MIT 权利及申请流程 / Scope, legacy MIT rights and application.
