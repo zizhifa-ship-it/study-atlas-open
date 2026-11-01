@@ -1,3 +1,4 @@
+from security import private_fd_mode
 """B 站公开视频：所选分 P 的公开字幕，或可选本机音轨转录。"""
 import json
 import os
@@ -120,7 +121,7 @@ def acquire_bilibili(root, url, progress=None, allow_asr=True, force=False):
     data.update(createdAt=datetime.now(timezone.utc).isoformat(), cached=False, partial=False)
     fd, name = tempfile.mkstemp(dir=cache, prefix='.bili-')
     try:
-        os.fchmod(fd, 0o600)
+        private_fd_mode(fd)
         with os.fdopen(fd, 'w') as f: json.dump(data, f, ensure_ascii=False)
         os.replace(name, target)
     finally:
