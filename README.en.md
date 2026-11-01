@@ -2,6 +2,8 @@
 
 [简体中文](README.md)
 
+> **Noncommercial use is free. Commercial use of newly licensed material requires prior written permission from [zizhifa-ship-it](https://github.com/zizhifa-ship-it) and individually agreed fees.** [Policy and application](COMMERCIAL-LICENSE.md) · [Apply](https://github.com/zizhifa-ship-it/study-atlas-open/issues/new?template=commercial-license.yml). Previously MIT-licensed material retains its existing rights.
+
 A local-first learning library for public YouTube / Bilibili videos, classroom text and Markdown. Organize categories, sources and notes; create source-backed knowledge modules, Cornell notes, mind maps, translations and review questions. The interface is currently primarily Simplified Chinese.
 
 ## Run locally
@@ -44,4 +46,10 @@ npm run test:js
 
 Browser tests use isolated temporary data and simulated AI. They require Playwright and a browser. The CI workflow defines Windows / macOS / Linux startup and onboarding tests on Python 3.9 and 3.12; check Actions for actual run results.
 
-MIT license. Contributions and reproducible bug reports are welcome. Do not attach credentials, personal libraries or private captions to public issues.
+## License and commercial use
+
+New original material, to the extent the maintainer has authority to license it, is covered by [LICENSE](LICENSE): noncommercial use is free, and commercial use requires a separate written license and compliance with agreed payment conditions. Prices and scope are quoted individually through the [commercial application](COMMERCIAL-LICENSE.md). A request, donation or payment alone does not grant a license.
+
+Code and documentation previously published under MIT through commit `7bcb7e431bc6a7f1725cbab534906afbb7f7285e`, including the existing core functionality and that material retained in later releases, remain under [the original MIT license](LICENSE-MIT-LEGACY), including commercial-use rights. This change is not retroactive. The new restricted license is source-available, not OSI open source. Third-party rights remain unchanged.
+
+Reproducible bug reports are welcome. Do not attach credentials, personal libraries or private captions to public issues.
