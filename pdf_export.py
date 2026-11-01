@@ -43,7 +43,7 @@ def export_notes(library, video_id="", kind="pdf", language='zh-CN'):
     try:
         root = Path(__file__).resolve().parent
         payload["mediaRoot"] = str(root / ".local/media")
-        candidates = [root / ".venv/bin/python", Path(sys.executable),
+        candidates = [root / ".venv/Scripts/python.exe", root / ".venv/bin/python", Path(sys.executable),
                       Path.home() / ".cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3"]
         configured = os.environ.get("STUDY_ATLAS_PDF_PYTHON")
         if configured:
@@ -79,7 +79,7 @@ def make_pdf(payload):
     from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, PageBreak, NextPageTemplate, KeepTogether, Flowable, Table, TableStyle, Image
 
-    fonts = [os.environ.get("STUDY_ATLAS_PDF_FONT", ""), "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    fonts = [os.environ.get("STUDY_ATLAS_PDF_FONT", ""), str(Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts/msyh.ttc"), str(Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts/simsun.ttc"), "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
              "/Library/Fonts/Arial Unicode.ttf", "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
              "/usr/share/fonts/truetype/arphic/uming.ttc"]
     font_path = next((p for p in fonts if p and Path(p).is_file()), None)
@@ -252,7 +252,7 @@ def make_pdf(payload):
         title = video.get("aiTitle") or video["title"]
         story.append(Paragraph(rich(title), styles["title"]))
         story.append(Paragraph(rich(category_name(video["categoryId"])) + " · " + rich(video["author"] or "作者未填写"), styles["meta"]))
-        story.append(Paragraph('视频来源 [S1]：<a href="' + escape(video["url"], quote=True) + '">打开原视频</a>', styles["meta"]))
+        story.append(Paragraph('资料来源 [S1]：本机导入的课堂文字' if video["url"].startswith("studyatlas://material/") else '视频来源 [S1]：<a href="' + escape(video["url"], quote=True) + '">打开原视频</a>', styles["meta"]))
         if video.get("aiTitle") and video["aiTitle"] != video["title"]:
             story.append(Paragraph("原始标题：" + rich(video["title"]), styles["meta"]))
         info = video.get('transcriptInfo') or {}
@@ -326,7 +326,8 @@ def make_pdf(payload):
         story.append(Paragraph(rich(insight["title"]), styles["title"]))
         paragraphs(insight["content"])
         for source in insight["sources"]:
-            story.append(Paragraph('[' + rich(source["source"]) + '] <a href="' + escape(source["url"], quote=True) + '">' + rich(source["title"]) + '</a>', styles["meta"]))
+            label = rich(source["title"]) + "（本地资料）" if source["url"].startswith("studyatlas://material/") else '<a href="' + escape(source["url"], quote=True) + '">' + rich(source["title"]) + '</a>'
+            story.append(Paragraph("[" + rich(source["source"]) + "] " + label, styles["meta"]))
     story.extend([NextPageTemplate("writing"), PageBreak(), Paragraph("我的理解与练习", styles["title"]), Paragraph("在无边记里添加手写、箭头和自己的例子；AI 原稿与个人批注分开保留。", styles["meta"])])
     doc.build(story)
     return result.getvalue()
