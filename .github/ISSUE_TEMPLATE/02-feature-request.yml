@@ -1,0 +1,23 @@
+name: 功能建议 / Feature request
+description: 告诉我们你学习时遇到的具体需求 / Suggest a useful learning workflow.
+title: "[建议 / Idea] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        欢迎提出建议。请描述真实场景，勿包含私人资料。提交建议不代表承诺实现或支持时间。
+        Describe your use case without private data. Requests do not imply a delivery commitment.
+  - type: textarea
+    id: need
+    attributes:
+      label: 想解决什么问题？ / What problem do you want to solve?
+      description: 在什么学习场景中遇到困难？ / Explain your learning workflow.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 希望怎么改？ / Desired outcome
+      description: 举一个理想的使用例子；也可以说明目前的替代方法。 / Example workflow and current workaround.
+    validations:
+      required: true
