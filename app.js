@@ -12,7 +12,7 @@ const esc = (value = '') => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;'
 const uid = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
 const state = {library: null, view: 'home', id: null, search: '', status: 'all', favorites: false, integrations:null, aiDraft:null, aiJob:null, knowledgeTabs:{}, compactMaps:{}, noteLanguages:{}, practiceData:null,
-  tasksData:null,tasksError:'',tasksFilter:'all',
+  tasksData:null,tasksError:'',tasksFilter:'all',setupData:null,setupError:'',
   practice:{mode:'today',course:'',current:null,drafts:{},revealed:{},skipped:[],busy:null,pendingRequests:{}}};
 try {state.noteLanguages=JSON.parse(localStorage.getItem('study-atlas-note-languages') || '{}');if(!state.noteLanguages || typeof state.noteLanguages!=='object' || Array.isArray(state.noteLanguages))state.noteLanguages={};for(const [id,language] of Object.entries(state.noteLanguages))if(!noteLanguages[language])delete state.noteLanguages[id];}catch {state.noteLanguages={};}
 const personalNotes = v => v.notes.filter(n=>!n.text.startsWith('旧版总结（'));
@@ -97,6 +97,7 @@ function parseTime(value, optional = false) {
   return seconds;
 }
 function canonicalURL(raw) {
+  if(/^studyatlas:\/\/material\/[a-f0-9]{32}$/.test(raw.trim())) return raw.trim();
   let url;
   try { url = new URL(/^https?:\/\//i.test(raw.trim()) ? raw.trim() : 'https://' + raw.trim()); }
   catch { throw new Error('请填写有效的视频链接'); }
@@ -115,12 +116,14 @@ function canonicalURL(raw) {
   return url.href;
 }
 function platform(url) {
+  if(url.startsWith('studyatlas://material/')) return '课堂资料';
   const host = new URL(url).hostname;
   if (/(^|\.)youtube\.com$|(^|\.)youtu\.be$/.test(host)) return 'YouTube';
   if (/(^|\.)bilibili\.com$|(^|\.)b23\.tv$/.test(host)) return '哔哩哔哩';
   return '视频课程';
 }
 function jumpURL(v, time) {
+  if(v.url.startsWith('studyatlas://material/')) return '#video/'+encodeURIComponent(v.id);
   const url = new URL(v.url);
   if (time !== null && /(^|\.)(youtube\.com|youtu\.be|bilibili\.com)$/.test(url.hostname)) url.searchParams.set('t', String(time));
   return url.href;
@@ -139,11 +142,12 @@ function route() {
   const [view, id] = location.hash.slice(1).split('/');
   const nextId=id ? decodeURIComponent(id) : null;
   const changed=state.view!==view || state.id!==nextId;
-  state.view = ['home','category','videos','notes','video','insights','knowledge','practice','quality','tasks'].includes(view) ? view : 'home';
+  state.view = ['home','category','videos','notes','video','insights','knowledge','practice','quality','tasks','setup'].includes(view) ? view : 'home';
   state.id = nextId;
   if ((state.view === 'category' && !category(state.id)) || (state.view === 'video' && !video(state.id))) state.view = 'home';
   if(changed) window.scrollTo(0,0);
   if (state.library) renderAll();
+  if (state.view==='setup') refreshSetup().then(()=>{if(state.view==='setup')renderMain();});
   if (state.view==='tasks') refreshTasks().then(()=>{if(state.view==='tasks')renderMain();});
 }
 
@@ -161,7 +165,7 @@ function renderNavigation() {
     }
   }
   addCategories(null);
-  html += `<div class="nav-section-title">连接与整理</div><button class="nav-item${state.view==='tasks'?' active':''}" data-action="navigate" data-view="tasks">${icon('book')}整理任务<span class="nav-count">${videos.filter(v=>['queued','metadata','transcript','ai','failed','needs_content'].includes(v.automation?.status)).length}</span></button><button class="nav-item" data-action="ai-settings">${icon('spark')}AI / Harness 设置</button><button class="nav-item" data-action="youtube">${icon('play')}YouTube 播放列表（可选）</button>`;
+  html += `<div class="nav-section-title">连接与整理</div><button class="nav-item" data-action="navigate" data-view="setup">${icon('grid')}首次使用 / 环境自检</button><button class="nav-item" data-action="import-material">${icon('note')}导入课堂文字 / Markdown</button><button class="nav-item${state.view==='tasks'?' active':''}" data-action="navigate" data-view="tasks">${icon('book')}整理任务<span class="nav-count">${videos.filter(v=>['queued','metadata','transcript','ai','failed','needs_content'].includes(v.automation?.status)).length}</span></button><button class="nav-item" data-action="ai-settings">${icon('spark')}AI / Harness 设置</button><button class="nav-item" data-action="youtube">${icon('play')}YouTube 播放列表（可选）</button>`;
   $('#navigation').innerHTML = html;
 }
 
@@ -186,10 +190,11 @@ function homePage() {
   const {videos, categories} = state.library;
   const learning = videos.filter(v => v.status === 'learning').slice(0, 1);
   return heading('我的学习知识库', '把好奇，整理成知识。', '粘贴公开视频链接，自动识别、分类并整理学习笔记。', addCategoryButton + addVideoButton)
+    + (!videos.length ? `<section class="panel first-run"><h2>欢迎建立你的学习知识库</h2><p>从一份课堂文字或一个视频开始。无需密钥也可以先保存、批注和备份。</p><div class="button-row"><button class="button primary" data-action="navigate" data-view="setup">首次使用引导</button><button class="button" data-action="import-material">导入文字资料</button></div></section>` : '')
     + `<section class="hero"><div class="hero-copy"><div class="hero-kicker">收藏 · 理解 · 融会贯通</div><h2>收藏只是开始，<br>理解才是<em>你的收获。</em></h2><p>只需一个链接，让 AI 把视频归入知识目录，留下有来源的学习笔记。</p><div class="steps"><span><b>01</b> 粘贴链接</span><span><b>02</b> 自动分类</span><span><b>03</b> 生成笔记</span></div></div><div class="hero-visual">${networkArt}</div></section>`
     + `<div class="stat-row">${[[categories.length,'个分类','让知识各归其位'],[videos.length,'个视频','收藏每一个启发'],[videos.filter(v => v.status === 'done').length,'个学完','一点进步，也算数'],[noteCount(videos),'篇笔记','留下自己的理解']].map(([n,label,tip])=>`<div class="stat"><div><strong>${n}</strong><span>${label}</span></div><small>${tip}</small></div>`).join('')}</div>`
     + `<section><div class="section-head"><h2>我的学习分类 <span>学习分类</span></h2><button class="text-button" data-action="new-category">管理自己的知识目录 ＋</button></div><div class="category-grid">${children(null).map(categoryCard).join('')}</div>${!categories.length ? empty('从第一个分类开始', '可以先建立“网络工程”，再在里面添加“网络基础”。', addCategoryButton) : ''}</section>`
-    + `<section><div class="section-head"><h2>${learning.length ? '继续上次的学习' : '最近收藏'} <span>继续学习</span></h2><button class="text-button" data-action="navigate" data-view="videos">查看全部 →</button></div>${videos.length ? `<div class="continue-grid"><div>${(learning.length ? learning : videos.slice(-1)).map(videoCard).join('')}</div><aside class="learning-tip"><div class="tip-kicker">学习小提醒</div><h3>看到一个好视频，<br>复制链接，让 AI 帮你整理。</h3><p>网站读取可用字幕，由 DeepSeek 自动分类、写笔记并保存。看完后核对和补充自己的理解，让知识真正属于你。</p></aside></div>` : empty('还没有收藏视频', '粘贴 YouTube 或哔哩哔哩链接，自动分类并制作图文笔记。', addVideoButton)}</section>`;
+    + `<section><div class="section-head"><h2>${learning.length ? '继续上次的学习' : '最近收藏'} <span>继续学习</span></h2><button class="text-button" data-action="navigate" data-view="videos">查看全部 →</button></div>${videos.length ? `<div class="continue-grid"><div>${(learning.length ? learning : videos.slice(-1)).map(videoCard).join('')}</div><aside class="learning-tip"><div class="tip-kicker">学习小提醒</div><h3>看到一个好视频，<br>复制链接，让 AI 帮你整理。</h3><p>网站读取可用字幕，由你选择的 AI 自动分类、写笔记并保存。看完后核对和补充自己的理解，让知识真正属于你。</p></aside></div>` : empty('还没有收藏视频', '粘贴 YouTube 或哔哩哔哩链接，自动分类并制作图文笔记。', addVideoButton)}</section>`;
 }
 function filteredVideos(videos) {
   return videos.filter(v => (state.status === 'all' || v.status === state.status) && (!state.favorites || v.favorite));
@@ -226,11 +231,11 @@ function detailPage() {
     + visualGuide(v)
     + knowledgePanel(v,state.knowledgeTabs[v.id] || 'details',state.compactMaps[v.id] || false,renderMarkdown)
     + (effectiveLanguage(base,desired)!=='zh-CN' ? `<details class="panel original-comparison"><summary>对照中文原稿</summary><div class="rich-notes">${renderMarkdown(base.summary)}</div>${(base.knowledge?.modules || []).map(m=>`<h3>${esc(m.title)}</h3><div class="rich-notes">${renderMarkdown(m.notes)}</div>`).join('')}</details>` : '')
-    + `<div class="detail-layout"><div><section class="watch-banner"><div><h2>AI 先整理，你再理解与批注。</h2><p>查看笔记、回顾提示，随时返回原视频。${v.durationSec ? '视频时长 ' + timeLabel(v.durationSec) + '。' : ''}</p></div><a class="button primary" href="${esc(v.url)}" target="_blank" rel="noopener noreferrer">打开视频 ↗</a></section><section class="panel"><div class="section-head" style="margin-top:0"><h2>AI 知识总结</h2><span class="small-label">已保存 · 可导出到无边记</span></div>${v.summary ? `${cornellSheet(v,`<div class="rich-notes">${renderMarkdown(v.summary)}</div>`)}<div class="source-list"><a href="${esc(v.url)}" target="_blank" rel="noopener noreferrer">[S1] 原视频：${esc(v.title)} ↗</a></div>` : '<p class="metadata">AI 整理完成后，知识脉络、例子与复习问题会出现在这里。</p>'}<details><summary>补充或修订中文原稿（选填）</summary><form id="summary-form"><label class="field"><span>这个视频主要讲了什么？</span><textarea name="summary" maxlength="30000" placeholder="用自己的话记录核心概念、适用场景、还没弄懂的问题…">${esc(base.summary)}</textarea></label><button class="button small" type="submit">保存修订</button></form></details></section><section class="panel"><div class="section-head" style="margin-top:0"><h2>我的补充与批注 <span>${personalNotes(v).length} 条补充</span></h2><button class="button small soft" data-action="new-note" data-id="${esc(v.id)}">＋ 写笔记</button></div>${personalNotes(v).length ? personalNotes(v).slice().sort((a,b)=>(a.timeSec ?? Infinity)-(b.timeSec ?? Infinity)).map(n => `<article class="note"><div class="note-header"><a class="note-time" href="${esc(jumpURL(v,n.timeSec))}" target="_blank" rel="noopener noreferrer">${timeLabel(n.timeSec)} ↗</a><span class="note-date">${esc(n.createdAt.slice(0,10))}</span><button class="icon-button" aria-label="编辑笔记 ${esc(n.text.slice(0,30))}" data-action="edit-note" data-id="${esc(n.id)}">···</button></div><div class="note-text">${esc(n.text)}</div></article>`).join('') : '<p class="metadata">遇到一个值得记住的概念，标上时间，写下一句话。</p>'}</section></div><aside><section class="panel"><h2>学习进度</h2><label class="field"><span>当前状态</span><select id="detail-status">${Object.entries(statusNames).map(([id,name])=>`<option value="${id}"${v.status === id ? ' selected' : ''}>${name}</option>`).join('')}</select></label><button class="button small${v.favorite ? ' soft' : ''}" data-action="favorite" data-id="${esc(v.id)}">${icon('star')}${v.favorite ? '已重点收藏' : '加入重点收藏'}</button><div class="metadata"><strong>所属分类</strong><p>${esc(pathName(v.categoryId))}</p><strong>标签</strong><div class="tags">${v.tags.map(t=>`<button class="tag" data-action="search-tag" data-tag="${esc(t)}">${esc(t)}</button>`).join('') || '尚未添加'}</div><strong>收藏时间</strong><p>${esc(v.createdAt.slice(0,10))}</p></div></section></aside></div>`;
+    + `<div class="detail-layout"><div><section class="watch-banner"><div><h2>AI 先整理，你再理解与批注。</h2><p>${platform(v.url)==='课堂资料'?'原始课堂资料已保存在本机，可随时对照与补充。':'查看笔记、回顾提示，随时返回原视频。'}${v.durationSec ? '视频时长 ' + timeLabel(v.durationSec) + '。' : ''}</p></div>${platform(v.url)==='课堂资料'?`<button class="button primary" data-action="navigate" data-view="quality" data-id="${esc(v.id)}">查看原始资料</button>`:`<a class="button primary" href="${esc(v.url)}" target="_blank" rel="noopener noreferrer">打开视频 ↗</a>`}</section><section class="panel"><div class="section-head" style="margin-top:0"><h2>AI 知识总结</h2><span class="small-label">已保存 · 可导出到无边记</span></div>${v.summary ? `${cornellSheet(v,`<div class="rich-notes">${renderMarkdown(v.summary)}</div>`)}<div class="source-list">${platform(v.url)==='课堂资料'?`<span>[S1] 本地课堂资料：${esc(v.title)}</span>`:`<a href="${esc(v.url)}" target="_blank" rel="noopener noreferrer">[S1] 原视频：${esc(v.title)} ↗</a>`}</div>` : '<p class="metadata">AI 整理完成后，知识脉络、例子与复习问题会出现在这里。</p>'}<details><summary>补充或修订中文原稿（选填）</summary><form id="summary-form"><label class="field"><span>这个视频主要讲了什么？</span><textarea name="summary" maxlength="30000" placeholder="用自己的话记录核心概念、适用场景、还没弄懂的问题…">${esc(base.summary)}</textarea></label><button class="button small" type="submit">保存修订</button></form></details></section><section class="panel"><div class="section-head" style="margin-top:0"><h2>我的补充与批注 <span>${personalNotes(v).length} 条补充</span></h2><button class="button small soft" data-action="new-note" data-id="${esc(v.id)}">＋ 写笔记</button></div>${personalNotes(v).length ? personalNotes(v).slice().sort((a,b)=>(a.timeSec ?? Infinity)-(b.timeSec ?? Infinity)).map(n => `<article class="note"><div class="note-header"><a class="note-time" href="${esc(jumpURL(v,n.timeSec))}" target="_blank" rel="noopener noreferrer">${timeLabel(n.timeSec)} ↗</a><span class="note-date">${esc(n.createdAt.slice(0,10))}</span><button class="icon-button" aria-label="编辑笔记 ${esc(n.text.slice(0,30))}" data-action="edit-note" data-id="${esc(n.id)}">···</button></div><div class="note-text">${esc(n.text)}</div></article>`).join('') : '<p class="metadata">遇到一个值得记住的概念，标上时间，写下一句话。</p>'}</section></div><aside><section class="panel"><h2>学习进度</h2><label class="field"><span>当前状态</span><select id="detail-status">${Object.entries(statusNames).map(([id,name])=>`<option value="${id}"${v.status === id ? ' selected' : ''}>${name}</option>`).join('')}</select></label><button class="button small${v.favorite ? ' soft' : ''}" data-action="favorite" data-id="${esc(v.id)}">${icon('star')}${v.favorite ? '已重点收藏' : '加入重点收藏'}</button><div class="metadata"><strong>所属分类</strong><p>${esc(pathName(v.categoryId))}</p><strong>标签</strong><div class="tags">${v.tags.map(t=>`<button class="tag" data-action="search-tag" data-tag="${esc(t)}">${esc(t)}</button>`).join('') || '尚未添加'}</div><strong>收藏时间</strong><p>${esc(v.createdAt.slice(0,10))}</p></div></section></aside></div>`;
 }
 function qualityPage() {
   return heading('按需查看','质量与来源','查看资料来源、核对问题和修订记录。日常阅读请进入课程笔记。')
-    + state.library.videos.map(v=>`<details class="panel quality-course" data-quality-video="${esc(v.id)}"><summary>${esc(displayTitle(v))}<span class="quality-meta">${v.knowledge ? v.knowledge.modules.length+' 个模块' : '模块尚未完成'}</span></summary><div class="quality-content"><p><strong>来源：</strong>${esc(v.transcriptInfo?.source || (v.transcript ? '已保存的课程资料' : '尚无学习资料'))}${v.transcriptInfo?.language?' · '+esc(v.transcriptInfo.language):''}</p>${v.transcriptInfo?.kind==='asr'?'<p class="notice">本机语音识别可能误听术语、数字与代码，请结合课程核对。</p>':''}<p class="metadata">最近任务：${esc(v.automation?.message || '尚无记录')}${v.automation?.model?' · 模型：'+esc(v.automation.model):''}</p><div class="button-row"><button class="button small" data-action="navigate" data-view="video" data-id="${esc(v.id)}">打开笔记</button><button class="button small soft" data-action="format-cornell" data-id="${esc(v.id)}" ${v.knowledge?'':'disabled'}>AI 整理康奈尔结构</button><button class="button small" data-action="build-knowledge" data-id="${esc(v.id)}">重新构建模块</button>${['YouTube','哔哩哔哩'].includes(platform(v.url))?`<button class="button small" data-action="retry-import" data-id="${esc(v.id)}">重新获取与整理</button>`:''}</div>${v.visuals?`<p class="metadata">图文导学：${esc(v.visuals.message)}。画面用于回顾，AI 笔记依据字幕或转录整理。</p>`:''}<button class="button small" data-action="build-visuals" data-id="${esc(v.id)}">重新生成图文导学</button>${qualityReport(v)}${v.notes.some(n=>n.text.startsWith('旧版总结（'))?`<details class="saved-history"><summary>历史总结版本</summary>${v.notes.filter(n=>n.text.startsWith('旧版总结（')).map(n=>`<article class="review-issue"><p class="metadata">${esc(n.createdAt.slice(0,10))}</p><div class="rich-notes">${renderMarkdown(n.text)}</div></article>`).join('')}</details>`:''}<section class="panel"><details><summary>字幕与学习资料（通常由网站自动读取）</summary><div class="section-head" style="margin-top:15px"><h2>原始资料</h2><button class="button small" data-action="fetch-transcript" data-id="${esc(v.id)}">获取原字幕 / 本机转录</button><button class="button small soft" data-action="import-transcript" data-id="${esc(v.id)}">导入转录文件并自动制作笔记</button></div><form data-transcript-form="${esc(v.id)}"><label class="field"><span>转录文本 / 课堂资料（供 AI 整理使用）</span><textarea name="transcript" maxlength="200000" rows="6" placeholder="读取字幕，或将视频页面的转录文本粘贴到这里。AI 会依据这些资料及你的笔记整理。">${esc(v.transcript || '')}</textarea><small>${(v.transcript || '').length.toLocaleString()} 字符 · 资料先保存，AI 才会使用；部分视频的字幕可能无法自动读取。</small></label><button class="button small" type="submit">保存学习资料</button></form></details></section></div></details>`).join('');
+    + state.library.videos.map(v=>`<details class="panel quality-course" data-quality-video="${esc(v.id)}"${state.id===v.id?' open':''}><summary>${esc(displayTitle(v))}<span class="quality-meta">${v.knowledge ? v.knowledge.modules.length+' 个模块' : '模块尚未完成'}</span></summary><div class="quality-content"><p><strong>来源：</strong>${esc(v.transcriptInfo?.source || (v.transcript ? '已保存的课程资料' : '尚无学习资料'))}${v.transcriptInfo?.language?' · '+esc(v.transcriptInfo.language):''}</p>${v.transcriptInfo?.kind==='asr'?'<p class="notice">本机语音识别可能误听术语、数字与代码，请结合课程核对。</p>':''}<p class="metadata">最近任务：${esc(v.automation?.message || '尚无记录')}${v.automation?.model?' · 模型：'+esc(v.automation.model):''}</p><div class="button-row"><button class="button small" data-action="navigate" data-view="video" data-id="${esc(v.id)}">打开笔记</button><button class="button small soft" data-action="format-cornell" data-id="${esc(v.id)}" ${v.knowledge?'':'disabled'}>AI 整理康奈尔结构</button><button class="button small" data-action="build-knowledge" data-id="${esc(v.id)}">重新构建模块</button>${['YouTube','哔哩哔哩'].includes(platform(v.url))?`<button class="button small" data-action="retry-import" data-id="${esc(v.id)}">重新获取与整理</button>`:''}</div>${v.visuals?`<p class="metadata">图文导学：${esc(v.visuals.message)}。画面用于回顾，AI 笔记依据字幕或转录整理。</p>`:''}${platform(v.url)==='课堂资料'?'':`<button class="button small" data-action="build-visuals" data-id="${esc(v.id)}">重新生成图文导学</button>`}${qualityReport(v)}${v.notes.some(n=>n.text.startsWith('旧版总结（'))?`<details class="saved-history"><summary>历史总结版本</summary>${v.notes.filter(n=>n.text.startsWith('旧版总结（')).map(n=>`<article class="review-issue"><p class="metadata">${esc(n.createdAt.slice(0,10))}</p><div class="rich-notes">${renderMarkdown(n.text)}</div></article>`).join('')}</details>`:''}<section class="panel"><details><summary>字幕与学习资料（通常由网站自动读取）</summary><div class="section-head" style="margin-top:15px"><h2>原始资料</h2>${platform(v.url)==='课堂资料'?'':`<button class="button small" data-action="fetch-transcript" data-id="${esc(v.id)}">获取原字幕 / 本机转录</button>`}<button class="button small soft" data-action="import-transcript" data-id="${esc(v.id)}">导入转录文件并自动制作笔记</button></div><form data-transcript-form="${esc(v.id)}"><label class="field"><span>转录文本 / 课堂资料（供 AI 整理使用）</span><textarea name="transcript" maxlength="200000" rows="6" placeholder="读取字幕，或将视频页面的转录文本粘贴到这里。AI 会依据这些资料及你的笔记整理。">${esc(v.transcript || '')}</textarea><small>${(v.transcript || '').length.toLocaleString()} 字符 · 资料先保存，AI 才会使用；部分视频的字幕可能无法自动读取。</small></label><button class="button small" type="submit">保存学习资料</button></form></details></section></div></details>`).join('');
 }
 
 function searchPage() {
@@ -254,12 +259,13 @@ function renderMain() {
   else if (state.view === 'knowledge') html = knowledgePage();
   else if (state.view === 'quality') html = qualityPage();
   else if (state.view === 'tasks') html = tasksPage();
+  else if (state.view === 'setup') html = setupPage();
   else if (state.view === 'practice') html = practicePage(state.practiceData,state.library,state.practice);
   else if (state.view === 'insights') html = insightsPage();
   else if (state.view === 'videos') html = heading('我的视频库','全部视频','收藏有价值的课程，按照自己的节奏学习。',addVideoButton) + videoSection(state.library.videos);
   else html = homePage();
   $('#content').innerHTML = html;
-  const name = state.search ? '搜索' : state.view === 'category' ? pathName(state.id) : state.view === 'video' ? pathName(video(state.id).categoryId) + ' / 视频笔记' : ({home:'分类总览',videos:'全部视频',notes:'学习笔记',insights:'AI 总结与经验',knowledge:'知识模块',practice:'复习与自测',quality:'质量与来源',tasks:'整理任务'}[state.view] || '分类总览');
+  const name = state.search ? '搜索' : state.view === 'category' ? pathName(state.id) : state.view === 'video' ? pathName(video(state.id).categoryId) + ' / 视频笔记' : ({home:'分类总览',videos:'全部视频',notes:'学习笔记',insights:'AI 总结与经验',knowledge:'知识模块',practice:'复习与自测',quality:'质量与来源',tasks:'整理任务',setup:'首次使用'}[state.view] || '分类总览');
   $('#breadcrumb').innerHTML = '我的学习空间 <span class="muted">/</span> <strong>' + esc(name) + '</strong>';
   if(state.view==='video' && state.pendingModule) {
     document.getElementById('module-'+state.pendingModule)?.scrollIntoView({block:'start'});
@@ -311,6 +317,39 @@ async function refreshTasks() {
   try {state.tasksData=await request('/api/tasks');state.tasksError='';}
   catch(error) {state.tasksError=error.message;}
 }
+async function refreshSetup() {
+  try {state.setupData=await request('/api/setup/status');state.setupError='';}
+  catch(error) {state.setupError=error.message;}
+}
+function setupPage() {
+  const setup=state.setupData;
+  return heading('从第一份资料开始','首次使用与环境自检','基础收藏、文字笔记和备份无需模型密钥；按需要逐步启用 AI、视频提取和导出。',`<button class="button" data-action="setup-refresh">重新检查</button>`)
+    + `<div class="setup-steps"><section class="panel"><span class="small-label">01 · 保存你的资料</span><h2>从视频，也从课堂讲义开始</h2><p>导入 TXT、Markdown 或字幕文件，保留原文与代码；也可粘贴公开 YouTube、哔哩哔哩链接。</p><div class="button-row"><button class="button primary" data-action="import-material">导入文字资料</button><button class="button" data-action="new-video">粘贴视频链接</button></div></section><section class="panel"><span class="small-label">02 · 选择你的模型</span><h2>连接已有工具，或独立运行本机模型</h2><p>支持 Harness、DeepSeek 官方 API，以及 Ollama、LM Studio、硅基流动、OpenRouter 兼容接口。</p><button class="button soft" data-action="ai-settings">选择 AI 接入方式</button></section><section class="panel"><span class="small-label">03 · 理解、批注与迁移</span><h2>让笔记跟着你学习</h2><p>知识模块、脑图、自测和译文保存在本机。换电脑前导出 JSON 备份；AI 密钥需在新电脑重新配置。</p><div class="button-row"><button class="button" data-action="navigate" data-view="notes">查看学习笔记</button><button class="button" data-action="backup">导出与备份</button></div></section></div>`
+    + (state.setupError?`<p class="notice" role="alert">${esc(state.setupError)}</p>`:'')
+    + (setup?`<section class="panel"><div class="section-head"><h2>当前电脑：${esc(setup.platform)} · Python ${esc(setup.python)}</h2></div><p class="metadata">仅检查本机，不安装软件、不自动请求模型。可选项暂未启用时，其他功能仍可使用。</p><div class="setup-checks">${setup.checks.map(c=>`<article><span class="task-badge ${c.ready?'complete':'attention'}">${c.ready?'已就绪':'按需配置'}</span><div><h3>${esc(c.name)}</h3><p>${esc(c.detail)}</p></div></article>`).join('')}</div><p class="notice">${esc(setup.privacy)}</p></section>`:'<p class="metadata" role="status">正在检查本机环境…</p>');
+}
+async function materialModal() {
+  const setup=await request('/api/setup/status');
+  showModal('导入课堂文字与 Markdown','可先保存资料并批注；勾选自动整理后，资料会发送给你当前选择的模型。',`<form>
+    <label class="field"><span>课程标题</span><input name="title" required maxlength="500" placeholder="例如：C 语言第 2 讲 · 分支与循环"></label>
+    <label class="field"><span>分类</span><select name="categoryId"><option value="">课堂资料（自动创建）</option>${categoryOptions('')}</select></label>
+    <label class="field"><span>从文件读取（可选）</span><input type="file" name="materialFile" accept=".txt,.md,.markdown,.srt,.vtt,.json,.json3"><small>UTF-8 文字文件，最多 800 KB；有效正文最多 20 万字符。</small></label>
+    <input type="hidden" name="filename" value="课堂资料.txt">
+    <label class="field"><span>原始文字或 Markdown</span><textarea name="content" required minlength="20" maxlength="200000" rows="9" placeholder="粘贴课堂讲义、文章笔记或字幕。TXT / Markdown 中的代码与缩进会原样保存。"></textarea></label>
+    <label class="source-choice"><input type="checkbox" name="generate"${setup.aiConfigured?' checked':''}><span>保存后由 AI 制作知识模块、脑图与复习问答<small>${setup.aiConfigured?'使用当前模型额度，进度在“整理任务”中查看。':'当前尚未配置 AI。可以先保存资料，之后选择模型再整理。'}</small></span></label>
+    ${actions('保存课堂资料')}</form>`,async form=>{
+      const result=await post('/api/material/course',{title:form.get('title'),categoryId:form.get('categoryId'),filename:form.get('filename'),content:form.get('content'),generate:form.get('generate')==='on'});
+      state.library=result.library;state.dirty=false;go('video',result.videoId);toast(result.queued?'资料已保存，AI 已加入整理队列':'课堂资料已保存，可以批注或稍后制作 AI 笔记');
+    });
+  const form=modal.querySelector('form');
+  form.elements.namedItem('materialFile').addEventListener('change',async event=>{
+    const file=event.target.files[0];if(!file)return;
+    const submit=form.querySelector('[type=submit]');submit.disabled=true;
+    try {if(file.size>800000)throw new Error('文件超过 800 KB，请按章节拆分');form.elements.namedItem('content').value=await file.text();form.elements.namedItem('filename').value=file.name;if(!form.elements.namedItem('title').value)form.elements.namedItem('title').value=file.name.replace(/\.[^.]+$/,'');form.querySelector('.form-error').textContent='';}
+    catch(error) {form.querySelector('.form-error').textContent=error.message;}
+    finally {submit.disabled=false;}
+  });
+}
 function tasksPage() {
   const data=state.tasksData,counts=data?.counts || {},filters=[['all','全部'],['active','进行中'],['attention','需要处理'],['ready','已完成']];
   const active=['queued','metadata','transcript','ai'];
@@ -337,7 +376,7 @@ function smartImportModal() {
 function videoModal(id) {
   if (!state.library.categories.length) { toast('先创建一个分类，再收藏视频'); categoryModal(); return; }
   const v = id ? video(id) : {title:'',url:'',author:'',categoryId:state.view === 'category' ? state.id : state.library.categories[0].id,tags:[],durationSec:0,status:'todo'};
-  showModal(id ? '编辑视频' : '把好视频放进分类', '支持 YouTube、哔哩哔哩和其他课程链接。标题由你填写，方便以后找到。', `<form><label class="field"><span>视频链接</span><input name="url" required maxlength="3000" placeholder="https://www.youtube.com/watch?v=…" value="${esc(v.url)}"></label><label class="field"><span>视频标题</span><input name="title" required maxlength="500" placeholder="给课程一个好找的名字" value="${esc(displayTitle(v))}"></label><label class="field"><span>放入分类</span><select name="categoryId" required>${categoryOptions(v.categoryId)}</select></label><div class="field-row"><label class="field"><span>作者 / 频道（选填）</span><input name="author" maxlength="200" value="${esc(v.author)}"></label><label class="field"><span>时长（选填）</span><input name="duration" placeholder="例如：8:26" value="${v.durationSec ? timeLabel(v.durationSec) : ''}"></label></div><label class="field"><span>标签（选填）</span><input name="tags" maxlength="1200" placeholder="用逗号分隔，例如：OSI, TCP/IP, 网络入门" value="${esc(v.tags.join(', '))}"></label><label class="field"><span>学习状态</span><select name="status">${Object.entries(statusNames).map(([value,name])=>`<option value="${value}"${v.status === value ? ' selected' : ''}>${name}</option>`).join('')}</select></label>${actions('保存视频',id ? `<button type="button" class="button danger" data-action="delete-video" data-id="${esc(id)}">移除视频</button>` : '')}</form>`, async form => {
+  showModal(id ? '编辑视频' : '把好视频放进分类', '支持 YouTube、哔哩哔哩和其他课程链接。标题由你填写，方便以后找到。', `<form>${v.url.startsWith('studyatlas://material/')?`<input name="url" type="hidden" value="${esc(v.url)}">`:`<label class="field"><span>视频链接</span><input name="url" required maxlength="3000" placeholder="https://www.youtube.com/watch?v=…" value="${esc(v.url)}"></label>`}<label class="field"><span>视频标题</span><input name="title" required maxlength="500" placeholder="给课程一个好找的名字" value="${esc(displayTitle(v))}"></label><label class="field"><span>放入分类</span><select name="categoryId" required>${categoryOptions(v.categoryId)}</select></label><div class="field-row"><label class="field"><span>作者 / 频道（选填）</span><input name="author" maxlength="200" value="${esc(v.author)}"></label><label class="field"><span>时长（选填）</span><input name="duration" placeholder="例如：8:26" value="${v.durationSec ? timeLabel(v.durationSec) : ''}"></label></div><label class="field"><span>标签（选填）</span><input name="tags" maxlength="1200" placeholder="用逗号分隔，例如：OSI, TCP/IP, 网络入门" value="${esc(v.tags.join(', '))}"></label><label class="field"><span>学习状态</span><select name="status">${Object.entries(statusNames).map(([value,name])=>`<option value="${value}"${v.status === value ? ' selected' : ''}>${name}</option>`).join('')}</select></label>${actions('保存视频',id ? `<button type="button" class="button danger" data-action="delete-video" data-id="${esc(id)}">移除视频</button>` : '')}</form>`, async form => {
     const url = canonicalURL(form.get('url'));
     if (state.library.videos.some(other=>other.id !== id && canonicalURL(other.url) === url)) throw new Error('这个视频已经收藏过了，可以在搜索中找到它');
     const next = structuredClone(state.library);
@@ -348,7 +387,7 @@ function videoModal(id) {
 }
 function noteModal(id) {
   const v = video(state.id), n = id ? v.notes.find(x=>x.id === id) : {text:'',timeSec:null};
-  showModal(id ? '编辑笔记' : '记下这一刻的理解', v.title, `<form><label class="field"><span>视频时间点（选填）</span><input name="time" placeholder="例如：4:25" value="${n.timeSec === null ? '' : timeLabel(n.timeSec)}"><small>保存后可点击时间，跳回视频对应位置。其他课程平台可能不支持时间跳转。</small></label><label class="field"><span>笔记内容</span><textarea name="text" required maxlength="30000" rows="7" placeholder="这个概念是什么？它解决什么问题？可以举个例子吗？">${esc(n.text)}</textarea></label>${actions('保存笔记',id ? `<button type="button" class="button danger" data-action="delete-note" data-id="${esc(id)}">移除笔记</button>` : '')}</form>`, async form => {
+  showModal(id ? '编辑笔记' : '记下这一刻的理解', v.title, `<form>${v.url.startsWith('studyatlas://material/')?'<input name="time" type="hidden" value="">':`<label class="field"><span>视频时间点（选填）</span><input name="time" placeholder="例如：4:25" value="${n.timeSec === null ? '' : timeLabel(n.timeSec)}"><small>保存后可点击时间，跳回视频对应位置。其他课程平台可能不支持时间跳转。</small></label>`}<label class="field"><span>笔记内容</span><textarea name="text" required maxlength="30000" rows="7" placeholder="这个概念是什么？它解决什么问题？可以举个例子吗？">${esc(n.text)}</textarea></label>${actions('保存笔记',id ? `<button type="button" class="button danger" data-action="delete-note" data-id="${esc(id)}">移除笔记</button>` : '')}</form>`, async form => {
     const next = structuredClone(state.library), target = next.videos.find(x=>x.id === v.id);
     const item = {id:id || uid(),text:form.get('text').trim(),timeSec:parseTime(form.get('time'),true),createdAt:id ? n.createdAt : now()};
     if (id) target.notes[target.notes.findIndex(x=>x.id === id)] = item; else target.notes.push(item);
@@ -542,11 +581,11 @@ window.addEventListener('hashchange',route);
 const post = (url, data={}) => request(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
 const hasMaterial = v => [(v.transcript||''),v.summary,...v.notes.map(n=>n.text),v.knowledge ? JSON.stringify(v.knowledge.modules) : ''].join('\n').trim().length>=20;
 function insightCard(item) {
-  return `<article class="knowledge-card"><div class="small-label">共通经验 · ${esc(item.createdAt.slice(0,10))}</div><h2>${esc(item.title)}</h2><div class="rich-notes">${renderMarkdown(item.content)}</div><div class="source-list">${item.sources.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">[${esc(s.source)}] ${esc(s.title)} ↗</a>`).join('')}</div><button class="link-button" data-action="delete-insight" data-id="${esc(item.id)}">移除这篇归纳</button></article>`;
+  return `<article class="knowledge-card"><div class="small-label">共通经验 · ${esc(item.createdAt.slice(0,10))}</div><h2>${esc(item.title)}</h2><div class="rich-notes">${renderMarkdown(item.content)}</div><div class="source-list">${item.sources.map(s=>s.url.startsWith('studyatlas://material/')?`<span>[${esc(s.source)}] ${esc(s.title)}（本地资料）</span>`:`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">[${esc(s.source)}] ${esc(s.title)} ↗</a>`).join('')}</div><button class="link-button" data-action="delete-insight" data-id="${esc(item.id)}">移除这篇归纳</button></article>`;
 }
 function insightsPage() {
   const status=state.integrations;
-  const connection=status?.ai.mode==='deepseek' ? 'DeepSeek API' : status?.harness.configured ? 'Harness · '+(status.harness.model.model || 'DeepSeek') : '尚未连接 AI';
+  const connection=status?.ai.mode==='compatible' ? '兼容接口 · '+(status.ai.compatible?.profiles[status.ai.compatible.provider]?.model || '待配置') : status?.ai.mode==='deepseek' ? 'DeepSeek API' : status?.harness.configured ? 'Harness · '+(status.harness.model.model || 'DeepSeek') : '尚未连接 AI';
   return heading('连接知识 · 提炼经验','AI 总结与共通经验','从多条视频里寻找共同规律，也保留差异和适用条件。',`<button class="button" data-action="ai-settings">AI 连接设置</button><button class="button primary" data-action="synthesize">${icon('spark')}开始归纳</button>`)
     + `<div class="notice">当前使用：${esc(connection)}。整理依据是你保存的字幕、总结与时间点笔记；生成结果标注来源并自动保存，你可以随时补充与修订。</div>`
     + (state.aiJob ? '<div class="notice">正在整理所选资料，完成后自动保存。</div>' : '')
@@ -561,6 +600,7 @@ async function aiSettings() {
       <label class="field"><span>整理时使用</span><select name="mode" aria-label="整理时使用">
         <option value="harness"${status.ai.mode==='harness'?' selected':''}>本机 DeepSeek Harness</option>
         <option value="deepseek"${status.ai.mode==='deepseek'?' selected':''}>DeepSeek 官方 API</option>
+        <option value="compatible"${status.ai.mode==='compatible'?' selected':''}>兼容接口 / 独立本机模型</option>
       </select></label>
       <div data-ai-mode="harness"${status.ai.mode==='harness'?'':' hidden'}>
         <p class="metadata">${status.harness.configured?'Harness 已连接':'先连接终端中的 Harness，才能读取你的模型目录。'}</p>
@@ -570,6 +610,13 @@ async function aiSettings() {
       <div data-ai-mode="deepseek"${status.ai.mode==='deepseek'?'':' hidden'}>
         <label class="field"><span>官方 API 模型</span><input name="model" maxlength="100" value="${esc(status.ai.model)}"></label>
         <label class="field"><span>DeepSeek API Key</span><input name="apiKey" type="password" autocomplete="new-password" placeholder="${status.ai.hasApiKey?'已保存；留空保留现有密钥':'填写你的 DeepSeek API Key'}"><small>请求发送到 api.deepseek.com，费用由你的 DeepSeek 账户承担。</small></label>
+      </div>
+      <div data-ai-mode="compatible"${status.ai.mode==='compatible'?'':' hidden'}>
+        <label class="field"><span>兼容接口服务</span><select name="compatibleProvider" aria-label="兼容接口服务">${(status.ai.compatible?.presets || []).map(p=>`<option value="${esc(p.id)}"${p.id===status.ai.compatible.provider?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label>
+        <label class="field"><span>接口 Base URL</span><input name="compatibleBase" aria-label="接口 Base URL" maxlength="200"><small>云端地址固定为官方接口；本机服务仅允许回环地址。</small></label>
+        <label class="field"><span>兼容接口模型 ID</span><input name="compatibleModel" aria-label="兼容接口模型 ID" list="compatible-models" maxlength="200" placeholder="填写服务提供或已在本机安装的模型 ID"><datalist id="compatible-models"></datalist></label>
+        <label class="field"><span>兼容接口 API Key</span><input name="compatibleKey" aria-label="兼容接口 API Key" type="password" autocomplete="new-password"><small>密钥按供应商独立保存，本机服务通常可留空。切换服务不会挪用其他服务的密钥。</small></label>
+        <button type="button" class="button small" data-action="compatible-models">读取该服务的模型列表</button>
       </div>
       <label class="source-choice"><input name="smartCache" type="checkbox"${status.aiEfficiency?.enabled===false?'':' checked'}><span>智能省 token<small>复用校验通过的相同请求；已保存的笔记和译文保留。</small></span></label>
       <details class="notice"><summary>用量、资料获取与本机保护</summary>
@@ -581,11 +628,21 @@ async function aiSettings() {
       ${actions('保存 AI 设置')}
     </form>`,async form=>{
       const harnessModel=form.get('mode')==='harness' && status.harness.configured ? {...JSON.parse(form.get('harnessModel')),...(form.get('harnessEffort')?{reasoningEffort:form.get('harnessEffort')}:{})} : null;
-      state.integrations=await post('/api/integrations/ai',{mode:form.get('mode'),model:form.get('model'),apiKey:form.get('apiKey'),smartCache:form.get('smartCache')==='on',...(harnessModel?{harnessModel}:{})});
+      state.integrations=await post('/api/integrations/ai',{mode:form.get('mode'),model:form.get('model'),apiKey:form.get('apiKey'),smartCache:form.get('smartCache')==='on',...(harnessModel?{harnessModel}:{}),...(form.get('mode')==='compatible'?{compatible:{provider:form.get('compatibleProvider'),baseUrl:form.get('compatibleBase'),model:form.get('compatibleModel'),apiKey:form.get('compatibleKey')}}:{})});
       renderAll();toast('AI 设置已保存');
     });
   const form=modal.querySelector('form');
   bindHarnessModelFields(form,status.harness.catalog);
+  function compatibleProfile() {
+    const id=form.elements.namedItem('compatibleProvider').value,preset=status.ai.compatible?.presets.find(p=>p.id===id),profile=status.ai.compatible?.profiles[id] || {};
+    form.elements.namedItem('compatibleBase').value=profile.baseUrl || preset?.baseUrl || '';
+    form.elements.namedItem('compatibleBase').readOnly=preset?.local===false;
+    form.elements.namedItem('compatibleModel').value=profile.model || '';
+    const key=form.elements.namedItem('compatibleKey');key.value='';key.placeholder=profile.hasApiKey?'已保存；留空保留当前服务密钥':preset?.local?'本机服务通常无需密钥':'填写该服务自己的 API Key';
+    form.querySelector('#compatible-models').innerHTML='';
+  }
+  compatibleProfile();form.elements.namedItem('compatibleProvider').addEventListener('change',compatibleProfile);
+
   form.elements.namedItem('mode').addEventListener('change',event=>{
     form.querySelectorAll('[data-ai-mode]').forEach(section=>{section.hidden=section.dataset.aiMode!==event.target.value;});
   });
@@ -654,7 +711,10 @@ document.addEventListener('click',async event=>{
   const button=event.target.closest('[data-action]');if(!button||button.disabled) return;
   const {action,id}=button.dataset;
   try {
-    if(action==='task-refresh') {button.disabled=true;await refreshTasks();renderMain();}
+    if(action==='import-material') await materialModal();
+    else if(action==='setup-refresh') {await refreshSetup();renderMain();}
+    else if(action==='compatible-models') {const form=button.closest('form');button.disabled=true;const result=await post('/api/integrations/compatible/models',{compatible:{provider:form.elements.namedItem('compatibleProvider').value,baseUrl:form.elements.namedItem('compatibleBase').value,model:form.elements.namedItem('compatibleModel').value,apiKey:form.elements.namedItem('compatibleKey').value}});form.querySelector('#compatible-models').innerHTML=result.models.map(m=>`<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');toast('已读取 '+result.models.length+' 个模型，可在模型 ID 输入框中选择');}
+    else if(action==='task-refresh') {button.disabled=true;await refreshTasks();renderMain();}
     else if(action==='task-filter') {state.tasksFilter=button.dataset.filter;renderMain();}
     else if(action==='task-resume') {button.disabled=true;const result=await post('/api/tasks/resume',{videoId:id});state.library=result.library;await refreshTasks();renderAll();toast(result.duplicate?'这门课已在整理队列中':'已从保存的进度继续整理');}
     else if(action==='ai-settings') await aiSettings();
@@ -690,7 +750,7 @@ document.addEventListener('click',async event=>{
 document.addEventListener('submit',async event=>{
   if(!event.target.dataset.transcriptForm) return;
   event.preventDefault();const button=event.target.querySelector('[type="submit"]');button.disabled=true;
-  try {const next=structuredClone(state.library),v=next.videos.find(x=>x.id===event.target.dataset.transcriptForm);v.transcript=new FormData(event.target).get('transcript').trim();v.transcriptInfo={kind:'imported',source:'手动提供的学习资料',language:'',createdAt:now()};v.updatedAt=now();await save(next);toast('学习资料已保存');}
+  try {const next=structuredClone(state.library),v=next.videos.find(x=>x.id===event.target.dataset.transcriptForm);v.transcript=new FormData(event.target).get('transcript');v.transcriptInfo={kind:'imported',source:'手动提供的学习资料',language:'',createdAt:now()};v.updatedAt=now();await save(next);toast('学习资料已保存');}
   catch(error) {toast(error.message,true);button.disabled=false;}
 });
 $('#youtube-client-file').addEventListener('change',async event=>{
