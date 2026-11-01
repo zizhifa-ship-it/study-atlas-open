@@ -1,0 +1,42 @@
+name: 报告问题 / Bug report
+description: 安装、资料导入、模型连接或笔记显示遇到问题 / Tell us what failed.
+title: "[问题 / Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢试用！此 Issue 公开可见。请勿填写 API Key、Cookie、OAuth 文件、私人笔记或未经允许的完整字幕。
+        This report is public. Remove credentials and private learning material. Screenshots and redacted errors are optional.
+  - type: input
+    id: environment
+    attributes:
+      label: 系统与版本 / Environment
+      description: 操作系统、浏览器及使用的版本或提交 / OS, browser and release or commit.
+      placeholder: Windows 11 / Chrome / v0.1.0-beta.1
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 卡在哪一步？ / Where did it fail?
+      options:
+        - 启动与安装 / Startup
+        - 视频或文字导入 / Import
+        - 模型连接或生成 / AI connection or generation
+        - 笔记、脑图或复习 / Notes, mind maps or review
+        - 导出与备份 / Export or backup
+        - 其他 / Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 操作与结果 / Steps and result
+      description: 你做了什么，原本期待什么，实际发生了什么？ / Steps, expected behavior and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: 补充信息（可选） / Optional details
+      description: 可附已脱敏的报错或截图；模型问题可说明供应商和模型名，勿附密钥。视频问题可说明平台和语言，不必公开私密链接。
