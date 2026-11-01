@@ -241,6 +241,9 @@ class AutoImporter:
                 material = self.integrations.transcript(source["url"], progress=lambda message: self.stage(vid, 'transcript', message))
                 transcript = material['transcript']
                 source_info = {k: material.get(k, '') for k in ['kind', 'source', 'language', 'createdAt']}
+                for key in ['timeline', 'chapters']:
+                    if isinstance(material.get(key), list) and material[key]:
+                        source_info[key] = material[key]
                 if material.get('durationSec') and not source.get('durationSec'):
                     self.update(vid, durationSec=min(3600000, int(material['durationSec'])))
             except IntegrationError as exc:

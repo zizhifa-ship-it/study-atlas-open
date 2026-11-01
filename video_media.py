@@ -85,7 +85,11 @@ def frame_plan(root, video, duration):
     p = urlsplit(video['url'])
     key = ('bili-' + p.path.strip('/').split('/')[-1] + '-p' + parse_qs(p.query).get('p', ['1'])[0]) if 'bilibili.com' in (p.hostname or '') else parse_qs(p.query).get('v', [''])[0]
     segments = []
-    try: segments = json.loads((Path(root) / '.local/transcripts' / (key + '.json')).read_text()).get('segments', [])
+    try:
+        saved = json.loads((Path(root) / '.local/transcripts' / (key + '.json')).read_text())
+        segments = saved.get('segments', [])
+        if not segments and isinstance(saved.get('timeline'), list):
+            segments = [{'start': start, 'text': line} for start, line in zip(saved['timeline'], str(saved.get('transcript', '')).splitlines())]
     except (OSError, ValueError): pass
     norm = lambda s: re.sub(r'\s+', '', str(s)).casefold()
     matches, offsets, position = [], [], 0

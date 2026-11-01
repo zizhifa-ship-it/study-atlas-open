@@ -11,9 +11,9 @@
 
 ## 简介 / Overview
 
-一个在自己电脑运行的 AI 学习知识库，适合初学者阅读和修改。按 **分类 → 视频或课堂资料 → 笔记** 整理内容：粘贴 YouTube / 哔哩哔哩链接，或导入文字、Markdown、字幕，连接自己选择的模型，生成知识模块、康奈尔笔记、脑图、翻译和复习题；支持 PDF / iPad 无边记导出与 JSON 备份。界面目前主要使用简体中文。
+一个在自己电脑运行的 AI 学习知识库，适合初学者阅读和修改。按 **分类 → 视频或课堂资料 → 笔记** 整理内容：粘贴 YouTube / 哔哩哔哩链接，或导入文字、Markdown、字幕，连接自己选择的模型，生成知识模块、康奈尔笔记、脑图、翻译和复习题；支持 PDF / iPad 无边记导出、JSON 备份，以及 DOI / arXiv 论文知识库与学术路径。界面目前主要使用简体中文。
 
-A local-first AI learning library designed for beginners to explore and customize. Organize **categories → videos or class materials → notes**: paste YouTube / Bilibili links or import text, Markdown and captions, connect your preferred model, and create knowledge modules, Cornell notes, mind maps, translations and review questions. Export PDF / iPad Freeform materials and JSON backups. The interface is currently primarily Simplified Chinese. See the [English guide](README.en.md) for installation and details.
+A local-first AI learning library designed for beginners to explore and customize. Organize **categories → videos or class materials → notes**: paste YouTube / Bilibili links or import text, Markdown and captions, connect your preferred model, and create knowledge modules, Cornell notes, mind maps, translations and review questions. Export PDF / iPad Freeform materials and JSON backups, and manage a DOI / arXiv paper library with an academic review path. The interface is currently primarily Simplified Chinese. See the [English guide](README.en.md) for installation and details.
 
 > **License:** Noncommercial use is free. Commercial use of newly licensed material requires prior written permission and agreed fees; previously MIT-licensed material retains its original rights. [Licensing policy and application](COMMERCIAL-LICENSE.md).
 
@@ -31,6 +31,8 @@ A local-first AI learning library designed for beginners to explore and customiz
 - 为视频写知识总结和带时间点的个人补充。
 - 搜索标题、作者、分类、标签及笔记正文。
 - 导出完整 JSON 备份或 Markdown 笔记，合并导入备份。
+- 单门课程可导出“完整视频讲义”：封面、AI 笔记、章节目录、可点击时间码和完整字幕；PDF/逐页 PNG 可导入无边记，素材包内的 Markdown 可导入 Obsidian、Notion 等笔记软件。
+- 论文知识库：按 DOI / arXiv 读取公开题录，记录筛选、精读、页码摘录与研究问题；把已纳入论文组成综述矩阵，导出 BibTeX、RIS 和 CSV。
 - 每次保存前自动备份，保留最近 30 份；不同页面的保存冲突会提示。
 - 整理任务页显示真实步骤、排队位置及已保存模块；中断后按原任务范围继续，避免重做已完成的导入与总结。
 - 连接本机 DeepSeek Harness，从实际目录自选模型与推理强度；也可独立使用 DeepSeek 官方 API、Ollama、LM Studio、硅基流动或 OpenRouter。
@@ -52,6 +54,8 @@ A local-first AI learning library designed for beginners to explore and customiz
 - 也可直接执行 `python3 server.py --open`（Windows 可用 `python` 或 `py -3`）。
 
 打开 <http://127.0.0.1:8765>，保持终端运行。启动器优先使用项目 `.venv`。端口冲突时加 `--port 8766`。macOS 使用 `.command` 前需先赋予执行权限，也可以直接使用上面的终端命令。
+
+**同一 Wi-Fi 的 iPad / 手机**：运行 `sh start.sh --lan`（Windows 用 `start.bat --lan`）。终端会打印私网 IP 和固定的 Bonjour 地址（如 `http://<电脑名>.local:8765/`），登录码在 `.local/lan-code.txt`；在 iPad 打开地址并输入登录码即可。Wi‑Fi 重新分配 IP 后，`.local` 地址通常仍可用。该模式只接受私网 / `.local` 地址，登录后使用 HttpOnly、SameSite 会话；默认本机模式不开启。不要做公网端口转发。详见 [局域网与 iPad 访问](docs/局域网与iPad访问.md)。
 
 先打开左侧 **首次使用 / 环境自检**。没有 AI 密钥也能保存课堂资料、分类、批注和备份；视频提取、AI、转录及 PDF 是按需启用的能力。安装、可选依赖、模型接入、备份迁移及验证边界见 [安装与兼容接口指南](docs/安装与兼容接口.md)。
 
@@ -93,7 +97,17 @@ YouTube 官方只读授权需要自己的 Google Cloud 桌面 OAuth 客户端。
 
 在视频详情或“学习笔记”点击“导出到 iPad 无边记”，下载带留白的 PDF 或包含逐页 PNG 的素材包。文件通过 AirDrop 或自己的 iCloud 云盘传到 iPad，图片拖入无边记画布后可手写、连线、添加便笺。AI 原稿保存在知识库，批注由无边记保管，暂不自动双向同步。
 
+单门课程还可选择“完整视频讲义”：PDF 和逐页图片会附上封面、AI 笔记、章节目录、可点击时间码和完整字幕；素材包另含 Markdown 讲义，方便导入无边记、GoodNotes、Obsidian 或 Notion。默认的 AI 笔记导出仍不包含原始字幕；完整讲义会包含你主动保存的字幕，请自行保管。
+
 详见 [iPad 与无边记指南](docs/iPad与无边记.md)。导出依赖与字体均在本机使用，源码不包含个人 PDF 或图片。
+
+## 论文知识库与学术路径
+
+左侧“研究与写作”进入论文知识库。粘贴 DOI、arXiv 编号或对应链接即可读取 Crossref / arXiv 的公开题录（标题、作者、年份、来源、摘要、关键词、DOI、原文页）；失败时仍可手动填写。查询只在你点击时发出，不上传笔记、账号或学习库。
+
+论文按“待筛选 → 精读中 → 已纳入 / 已排除”推进，可记录研究问题、方法、数据/样本、主要发现、局限、关联与可复用点，并附加页码、原文摘录和个人解释。已纳入的论文会进入“学术路径”的综述矩阵；“研究问题与范围”页可保存检索策略、纳入/排除标准和综合论证。
+
+引用导出支持 BibTeX、RIS，综述矩阵支持 Markdown 与 CSV。论文题录、精读和摘录保存在本机 `data/library.json` 和 JSON 备份中；公开链接仍需按各论文的许可使用。详见 [论文知识库与学术路径](docs/论文知识库与学术路径.md)。
 
 ## 从笔记到自测与复习
 
@@ -112,7 +126,9 @@ study-atlas/
 ├── index.html              页面结构
 ├── styles.css              页面样式、手机布局
 ├── app.js                  分类、视频、笔记和搜索逻辑
-├── server.py               本机服务、数据校验和保存
+├── server.py               本机 / 局域网服务、数据校验和保存
+├── lan_auth.py             局域网登录码与会话签名
+├── login.html / login.js   局域网登录页
 ├── integrations.py         Harness、DeepSeek API、YouTube OAuth
 ├── importer.py             链接识别、后台队列、AI 分类与自动保存
 ├── knowledge.py            模块规划、逐模块详解与第二轮自查
@@ -122,9 +138,10 @@ study-atlas/
 ├── exports.js              完整模块与复习记录 Markdown 导出
 ├── note_results.py          自动保存与旧版保护
 ├── pdf_export.py            PDF、中文字体与无边记逐页图片
+├── papers.py                DOI / arXiv 公开题录查询
 ├── requirements.txt         可选的导出依赖
 ├── data/
-│   ├── library.json        你的分类、视频和笔记
+│   ├── library.json        你的分类、视频、论文和笔记
 │   ├── library.example.json 可提交的空白示例
 │   └── .backups/           自动备份（不会提交到 GitHub）
 ├── docs/
@@ -136,7 +153,7 @@ study-atlas/
 
 `data/library.json` 是正式数据源，已被 Git 忽略。使用页面保存时文件会直接更新；关闭浏览器或停止服务不会清空资料。通过“导出与备份”下载的 JSON 包含个人学习资料，请自行保管。
 
-本版本在自己的电脑运行，访问地址只绑定 `127.0.0.1`。GitHub 保存项目源码、文档与空白示例；个人视频库、笔记、账号配置和凭据留在本机。网页里的“保存”不会上传 GitHub，也不会自动同步手机。跨设备使用可通过自行保管的 JSON 备份导入，在线同步需要后续开发。
+本版本默认只绑定 `127.0.0.1`；显式加 `--lan` 才接受同一私网设备，并用登录码建立会话。它仍是单用户、单份本机资料的访问方式，不是公网多人服务，也不做在线同步：多端同时编辑由版本号冲突检查保护，后保存的一方需要刷新。GitHub 保存项目源码、文档与空白示例；个人视频库、笔记、账号配置和凭据留在本机。网页里的“保存”不会上传 GitHub。跨设备也可继续使用自行保管的 JSON 备份导入。
 
 恢复自动备份：先停止服务，将 `data/.backups/` 中选中的 JSON **复制**到其他位置留存，再通过页面的“从备份合并导入”恢复缺少的视频。如果需要恢复被修改的旧笔记，先导出当前完整 JSON，然后在停止服务的情况下，用选定备份替换 `data/library.json`。合并导入遇到重复视频链接会保留当前版本。
 
@@ -184,11 +201,11 @@ B站支持 BV/av 长链接、b23.tv 短链接及常见分享文本。可读取�
 
 默认复用已校验的相同模块、分段摘录与译文，修改后只重译变化部分；长资料完整覆盖，独立自查保留。设置里可关闭结果缓存，并查看实际复用次数、避免发送的字符和接口已报告的 token。私有缓存不公开，首次生成不承诺固定节省比例。详见 [智能省 token](docs/智能省token.md)。
 
-## 本机安全加固
+## 本机与局域网安全
 
 写入接口使用每次服务启动更新的防伪造令牌，并校验 Host、Origin 和 Fetch Metadata；跨站 API 读取、页面嵌入、异常 JSON 和高频任务受到限制。平台资料重定向限制在白名单，带凭据的官方请求不跟随重定向，私有配置与备份限制路径和文件权限。旧 API 脚本需先读取 `/api/security`，网页已自动适配。
 
-本项目仍面向本机单用户；对外部署需要另行设计身份认证、HTTPS 和服务隔离。安全边界、限制与测试见 [安全与隐私](docs/安全与隐私.md)。
+本项目仍面向单用户；可选的 `--lan` 只开放私网 / Tailscale 地址，并要求登录码会话，Host/Origin 仍受限。局域网 HTTP 不是加密传输，只应在可信网络使用；公网部署仍需另行设计身份认证、HTTPS、多人权限和服务隔离。安全边界、限制与测试见 [安全与隐私](docs/安全与隐私.md)。
 
 ## 许可与商业使用
 

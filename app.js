@@ -5,13 +5,13 @@ import {localizedVideo, effectiveLanguage, translationControls, noteLanguages} f
 import {cornellSheet} from './cornell.js';
 import {knowledgePanel, mindmapSVG, qualityReport} from './knowledge.js';
 import {practicePage, practicePool, cardKey, mergePracticeAttempts} from './practice.js';
-import {libraryMarkdown} from './exports.js';
+import {libraryMarkdown, paperBibtex, paperRis, papersCsv, researchMarkdown} from './exports.js';
 // 阅读顺序：数据与请求 → 页面渲染 → 编辑窗口 → 用户操作。
 const $ = (selector) => document.querySelector(selector);
 const esc = (value = '') => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
-const state = {library: null, view: 'home', id: null, search: '', status: 'all', favorites: false, integrations:null, aiDraft:null, aiJob:null, knowledgeTabs:{}, compactMaps:{}, noteLanguages:{}, practiceData:null,
+const state = {library: null, view: 'home', id: null, search: '', status: 'all', favorites: false, paperFilter: 'all', integrations:null, aiDraft:null, aiJob:null, knowledgeTabs:{}, compactMaps:{}, noteLanguages:{}, practiceData:null,
   tasksData:null,tasksError:'',tasksFilter:'all',setupData:null,setupError:'',
   practice:{mode:'today',course:'',current:null,drafts:{},revealed:{},skipped:[],busy:null,pendingRequests:{}}};
 try {state.noteLanguages=JSON.parse(localStorage.getItem('study-atlas-note-languages') || '{}');if(!state.noteLanguages || typeof state.noteLanguages!=='object' || Array.isArray(state.noteLanguages))state.noteLanguages={};for(const [id,language] of Object.entries(state.noteLanguages))if(!noteLanguages[language])delete state.noteLanguages[id];}catch {state.noteLanguages={};}
@@ -65,6 +65,11 @@ async function save(next) {
 
 const category = id => state.library.categories.find(c => c.id === id);
 const video = id => state.library.videos.find(v => v.id === id);
+const papersData = () => state.library.papers || [];
+const paper = id => papersData().find(p => p.id === id);
+const paperStages = {candidate: '待筛选', screening: '精读中', included: '已纳入', excluded: '已排除'};
+const paperReadStates = {unread: '未读', reading: '阅读中', read: '已读完'};
+const paperReviewFields = [['question','研究问题'],['method','方法'],['data','数据 / 样本'],['findings','主要发现'],['limitations','局限'],['relevance','关联与可复用点']];
 const displayTitle = v => v.aiTitle || v.title;
 const children = id => state.library.categories.filter(c => c.parentId === id);
 function categoryPath(id) {
@@ -135,6 +140,7 @@ function go(view, id = '') {
   state.search = '';
   state.status = 'all';
   state.favorites = false;
+  state.paperFilter = 'all';
   const hash = '#' + view + (id ? '/' + encodeURIComponent(id) : '');
   if (location.hash === hash) route(); else location.hash = hash;
 }
@@ -142,9 +148,9 @@ function route() {
   const [view, id] = location.hash.slice(1).split('/');
   const nextId=id ? decodeURIComponent(id) : null;
   const changed=state.view!==view || state.id!==nextId;
-  state.view = ['home','category','videos','notes','video','insights','knowledge','practice','quality','tasks','setup'].includes(view) ? view : 'home';
+  state.view = ['home','category','videos','notes','video','insights','knowledge','practice','quality','tasks','setup','papers','paper','path'].includes(view) ? view : 'home';
   state.id = nextId;
-  if ((state.view === 'category' && !category(state.id)) || (state.view === 'video' && !video(state.id))) state.view = 'home';
+  if ((state.view === 'category' && !category(state.id)) || (state.view === 'video' && !video(state.id)) || (state.view === 'paper' && !paper(state.id))) state.view = 'home';
   if(changed) window.scrollTo(0,0);
   if (state.library) renderAll();
   if (state.view==='setup') refreshSetup().then(()=>{if(state.view==='setup')renderMain();});
@@ -153,10 +159,13 @@ function route() {
 
 function renderNavigation() {
   const {videos} = state.library;
+  const allPapers = papersData();
+  const includedPapers = allPapers.filter(p => p.stage === 'included').length;
   let html = [['home','grid','分类总览',state.library.categories.length],['videos','play','全部视频',videos.length],['notes','note','学习笔记',noteCount(videos)],['knowledge','network','知识模块',state.library.videos.reduce((n,v)=>n+(v.knowledge?.modules.length || 0),0)],['insights','spark','AI 总结与经验',(state.library.insights || []).length]]
     .map(([view, symbol, name, count]) => `<button class="nav-item${state.view === view && !state.search ? ' active' : ''}" data-action="navigate" data-view="${view}">${icon(symbol)}${name}<span class="nav-count">${count}</span></button>`).join('');
   html += `<button class="nav-item${state.view==='practice'?' active':''}" data-action="navigate" data-view="practice">${icon('book')}复习与自测<span class="nav-count">${(state.practiceData?.counts.due || 0)+(state.practiceData?.counts.new || 0)}</span></button>`;
   html += `<button class="nav-item${state.view==='quality'?' active':''}" data-action="navigate" data-view="quality">${icon('note')}质量与来源</button>`;
+  html += `<div class="nav-section-title">研究与写作</div><button class="nav-item${state.view==='papers'||state.view==='paper'?' active':''}" data-action="navigate" data-view="papers">${icon('book')}论文知识库<span class="nav-count">${allPapers.length}</span></button><button class="nav-item${state.view==='path'?' active':''}" data-action="navigate" data-view="path">${icon('network')}学术路径<span class="nav-count">${includedPapers}</span></button>`;
   html += `<div class="nav-section-title">学习分类<button aria-label="新建分类" data-action="new-category">＋</button></div>`;
   function addCategories(parent, depth = 0) {
     for (const c of children(parent)) {
@@ -167,6 +176,8 @@ function renderNavigation() {
   addCategories(null);
   html += `<div class="nav-section-title">连接与整理</div><button class="nav-item" data-action="navigate" data-view="setup">${icon('grid')}首次使用 / 环境自检</button><button class="nav-item" data-action="import-material">${icon('note')}导入课堂文字 / Markdown</button><button class="nav-item${state.view==='tasks'?' active':''}" data-action="navigate" data-view="tasks">${icon('book')}整理任务<span class="nav-count">${videos.filter(v=>['queued','metadata','transcript','ai','failed','needs_content'].includes(v.automation?.status)).length}</span></button><button class="nav-item" data-action="ai-settings">${icon('spark')}AI / Harness 设置</button><button class="nav-item" data-action="youtube">${icon('play')}YouTube 播放列表（可选）</button>`;
   $('#navigation').innerHTML = html;
+  const lanBox = $('#lan-session');
+  if(lanBox) lanBox.innerHTML = state.integrations?.security?.login ? '<button class="text-button" data-action="lan-logout" style="margin-top:10px">退出局域网登录</button>' : '';
 }
 
 function categoryCard(c) {
@@ -229,6 +240,7 @@ function detailPage() {
     + translationControls(base,desired)
     + automationPanel(base)
     + visualGuide(v)
+    + chapterPanel(v)
     + knowledgePanel(v,state.knowledgeTabs[v.id] || 'details',state.compactMaps[v.id] || false,renderMarkdown)
     + (effectiveLanguage(base,desired)!=='zh-CN' ? `<details class="panel original-comparison"><summary>对照中文原稿</summary><div class="rich-notes">${renderMarkdown(base.summary)}</div>${(base.knowledge?.modules || []).map(m=>`<h3>${esc(m.title)}</h3><div class="rich-notes">${renderMarkdown(m.notes)}</div>`).join('')}</details>` : '')
     + `<div class="detail-layout"><div><section class="watch-banner"><div><h2>AI 先整理，你再理解与批注。</h2><p>${platform(v.url)==='课堂资料'?'原始课堂资料已保存在本机，可随时对照与补充。':'查看笔记、回顾提示，随时返回原视频。'}${v.durationSec ? '视频时长 ' + timeLabel(v.durationSec) + '。' : ''}</p></div>${platform(v.url)==='课堂资料'?`<button class="button primary" data-action="navigate" data-view="quality" data-id="${esc(v.id)}">查看原始资料</button>`:`<a class="button primary" href="${esc(v.url)}" target="_blank" rel="noopener noreferrer">打开视频 ↗</a>`}</section><section class="panel"><div class="section-head" style="margin-top:0"><h2>AI 知识总结</h2><span class="small-label">已保存 · 可导出到无边记</span></div>${v.summary ? `${cornellSheet(v,`<div class="rich-notes">${renderMarkdown(v.summary)}</div>`)}<div class="source-list">${platform(v.url)==='课堂资料'?`<span>[S1] 本地课堂资料：${esc(v.title)}</span>`:`<a href="${esc(v.url)}" target="_blank" rel="noopener noreferrer">[S1] 原视频：${esc(v.title)} ↗</a>`}</div>` : '<p class="metadata">AI 整理完成后，知识脉络、例子与复习问题会出现在这里。</p>'}<details><summary>补充或修订中文原稿（选填）</summary><form id="summary-form"><label class="field"><span>这个视频主要讲了什么？</span><textarea name="summary" maxlength="30000" placeholder="用自己的话记录核心概念、适用场景、还没弄懂的问题…">${esc(base.summary)}</textarea></label><button class="button small" type="submit">保存修订</button></form></details></section><section class="panel"><div class="section-head" style="margin-top:0"><h2>我的补充与批注 <span>${personalNotes(v).length} 条补充</span></h2><button class="button small soft" data-action="new-note" data-id="${esc(v.id)}">＋ 写笔记</button></div>${personalNotes(v).length ? personalNotes(v).slice().sort((a,b)=>(a.timeSec ?? Infinity)-(b.timeSec ?? Infinity)).map(n => `<article class="note"><div class="note-header"><a class="note-time" href="${esc(jumpURL(v,n.timeSec))}" target="_blank" rel="noopener noreferrer">${timeLabel(n.timeSec)} ↗</a><span class="note-date">${esc(n.createdAt.slice(0,10))}</span><button class="icon-button" aria-label="编辑笔记 ${esc(n.text.slice(0,30))}" data-action="edit-note" data-id="${esc(n.id)}">···</button></div><div class="note-text">${esc(n.text)}</div></article>`).join('') : '<p class="metadata">遇到一个值得记住的概念，标上时间，写下一句话。</p>'}</section></div><aside><section class="panel"><h2>学习进度</h2><label class="field"><span>当前状态</span><select id="detail-status">${Object.entries(statusNames).map(([id,name])=>`<option value="${id}"${v.status === id ? ' selected' : ''}>${name}</option>`).join('')}</select></label><button class="button small${v.favorite ? ' soft' : ''}" data-action="favorite" data-id="${esc(v.id)}">${icon('star')}${v.favorite ? '已重点收藏' : '加入重点收藏'}</button><div class="metadata"><strong>所属分类</strong><p>${esc(pathName(v.categoryId))}</p><strong>标签</strong><div class="tags">${v.tags.map(t=>`<button class="tag" data-action="search-tag" data-tag="${esc(t)}">${esc(t)}</button>`).join('') || '尚未添加'}</div><strong>收藏时间</strong><p>${esc(v.createdAt.slice(0,10))}</p></div></section></aside></div>`;
@@ -238,15 +250,75 @@ function qualityPage() {
     + state.library.videos.map(v=>`<details class="panel quality-course" data-quality-video="${esc(v.id)}"${state.id===v.id?' open':''}><summary>${esc(displayTitle(v))}<span class="quality-meta">${v.knowledge ? v.knowledge.modules.length+' 个模块' : '模块尚未完成'}</span></summary><div class="quality-content"><p><strong>来源：</strong>${esc(v.transcriptInfo?.source || (v.transcript ? '已保存的课程资料' : '尚无学习资料'))}${v.transcriptInfo?.language?' · '+esc(v.transcriptInfo.language):''}</p>${v.transcriptInfo?.kind==='asr'?'<p class="notice">本机语音识别可能误听术语、数字与代码，请结合课程核对。</p>':''}<p class="metadata">最近任务：${esc(v.automation?.message || '尚无记录')}${v.automation?.model?' · 模型：'+esc(v.automation.model):''}</p><div class="button-row"><button class="button small" data-action="navigate" data-view="video" data-id="${esc(v.id)}">打开笔记</button><button class="button small soft" data-action="format-cornell" data-id="${esc(v.id)}" ${v.knowledge?'':'disabled'}>AI 整理康奈尔结构</button><button class="button small" data-action="build-knowledge" data-id="${esc(v.id)}">重新构建模块</button>${['YouTube','哔哩哔哩'].includes(platform(v.url))?`<button class="button small" data-action="retry-import" data-id="${esc(v.id)}">重新获取与整理</button>`:''}</div>${v.visuals?`<p class="metadata">图文导学：${esc(v.visuals.message)}。画面用于回顾，AI 笔记依据字幕或转录整理。</p>`:''}${platform(v.url)==='课堂资料'?'':`<button class="button small" data-action="build-visuals" data-id="${esc(v.id)}">重新生成图文导学</button>`}${qualityReport(v)}${v.notes.some(n=>n.text.startsWith('旧版总结（'))?`<details class="saved-history"><summary>历史总结版本</summary>${v.notes.filter(n=>n.text.startsWith('旧版总结（')).map(n=>`<article class="review-issue"><p class="metadata">${esc(n.createdAt.slice(0,10))}</p><div class="rich-notes">${renderMarkdown(n.text)}</div></article>`).join('')}</details>`:''}<section class="panel"><details><summary>字幕与学习资料（通常由网站自动读取）</summary><div class="section-head" style="margin-top:15px"><h2>原始资料</h2>${platform(v.url)==='课堂资料'?'':`<button class="button small" data-action="fetch-transcript" data-id="${esc(v.id)}">获取原字幕 / 本机转录</button>`}<button class="button small soft" data-action="import-transcript" data-id="${esc(v.id)}">导入转录文件并自动制作笔记</button></div><form data-transcript-form="${esc(v.id)}"><label class="field"><span>转录文本 / 课堂资料（供 AI 整理使用）</span><textarea name="transcript" maxlength="200000" rows="6" placeholder="读取字幕，或将视频页面的转录文本粘贴到这里。AI 会依据这些资料及你的笔记整理。">${esc(v.transcript || '')}</textarea><small>${(v.transcript || '').length.toLocaleString()} 字符 · 资料先保存，AI 才会使用；部分视频的字幕可能无法自动读取。</small></label><button class="button small" type="submit">保存学习资料</button></form></details></section></div></details>`).join('');
 }
 
+function paperAuthors(p) {
+  return (p.authors || []).join('、') || '作者未填写';
+}
+function paperVenueLine(p) {
+  return [p.year || '年份待补', p.venue || '期刊 / 会议待补'].join(' · ');
+}
+function paperReviewCount(p) {
+  return paperReviewFields.filter(([key]) => String((p.review || {})[key] || '').trim()).length;
+}
+function paperCard(p) {
+  const abstract = String(p.abstract || '').replace(/\s+/g, ' ').trim();
+  return `<article class="paper-card"><div class="paper-card-top"><span class="paper-stage stage-${esc(p.stage)}">${esc(paperStages[p.stage] || '待筛选')}</span><span>${esc(paperVenueLine(p))}</span></div><button class="paper-title" data-action="navigate" data-view="paper" data-id="${esc(p.id)}">${esc(p.title)}</button><p class="paper-authors">${esc(paperAuthors(p))}</p><p class="paper-abstract">${esc(abstract ? (abstract.length > 180 ? abstract.slice(0, 180) + '…' : abstract) : '摘要待补充')}</p><div class="tags">${[...(p.keywords || []), ...(p.tags || [])].slice(0,6).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div><div class="paper-card-foot"><span>${esc(paperReadStates[p.readState] || '未读')} · 精读 ${paperReviewCount(p)}/6</span><span>${p.doi ? esc(p.doi) : '无 DOI'}</span></div></article>`;
+}
+function papersPage() {
+  const all = papersData();
+  const filtered = (state.paperFilter === 'all' ? all : all.filter(p => p.stage === state.paperFilter)).slice().sort((a,b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+  const count = stage => all.filter(p => p.stage === stage).length;
+  const included = count('included');
+  return heading('研究从问题开始', '论文知识库', '把 DOI / arXiv 元数据、筛选状态、结构化精读和引用放在同一个本机知识库里。', `<button class="button primary" data-action="new-paper">${icon('plus')}加入论文</button><button class="button" data-action="navigate" data-view="path">${icon('network')}学术路径</button>`)
+    + `<div class="stat-row paper-stats">${[[all.length,'篇论文','全部文献'],[count('candidate'),'待筛选','先判断相关性'],[count('screening')+included,'篇精读/纳入','进入证据链'],[count('excluded'),'篇排除','保留排除理由']].map(([n,label,tip])=>`<div class="stat"><div><strong>${n}</strong><span>${label}</span></div><small>${tip}</small></div>`).join('')}</div>`
+    + `<div class="paper-toolbar"><div class="filter-row" role="group" aria-label="按论文阶段筛选">${[['all','全部'],['candidate','待筛选'],['screening','精读中'],['included','已纳入'],['excluded','已排除']].map(([key,name])=>`<button class="filter-tab${state.paperFilter===key?' selected':''}" data-action="paper-filter" data-stage="${key}">${name} <span>${key==='all'?all.length:count(key)}</span></button>`).join('')}</div><div class="button-row"><button class="button small" data-action="export-bibtex">BibTeX</button><button class="button small" data-action="export-ris">RIS</button></div></div>`
+    + (filtered.length ? `<div class="paper-grid">${filtered.map(paperCard).join('')}</div>` : empty('还没有符合条件的论文', all.length ? '换个阶段筛选，或继续补充论文。' : '从 DOI 或 arXiv 编号开始：先抓取公开元数据，再按“筛选 → 精读 → 纳入 → 综述”推进。', `<button class="button primary" data-action="new-paper">加入第一篇论文</button>`))
+    + `<p class="metadata paper-note">引用导出使用“已纳入”的论文；题录查询只访问 Crossref / arXiv 的公开元数据，不上传笔记。</p>`;
+}
+function academicPathPage() {
+  const research = state.library.research || {};
+  const included = papersData().filter(p => p.stage === 'included');
+  const count = stage => papersData().filter(p => p.stage === stage).length;
+  const missingReview = included.filter(p => paperReviewCount(p) < 6);
+  const next = [];
+  if (!String(research.question || '').trim()) next.push('先写清研究问题与范围。');
+  if (!included.length) next.push('把至少一篇候选论文推进为“已纳入”。');
+  if (missingReview.length) next.push(`有 ${missingReview.length} 篇已纳入论文的精读字段还没补齐。`);
+  if (!String(research.synthesis || '').trim()) next.push('在“综合论证”里写出跨论文的共同点、分歧与空白。');
+  return heading('从问题到论证', '学术路径', '把检索、筛选、精读、综述和引用串成一条可回看的路径；每一步都保存本机。', `<button class="button primary" data-action="new-paper">${icon('plus')}加入论文</button><button class="button" data-action="navigate" data-view="papers">论文库</button>`)
+    + `<div class="path-stages">${[['01','检索候选',count('candidate')+count('screening')+count('included')+count('excluded'),'candidate','先记录，再判断'],['02','精读筛选',count('screening'),'screening','只留下相关证据'],['03','纳入综述',included.length,'included','进入综述矩阵'],['04','写出论证',String(research.synthesis || '').trim() ? '已写' : '待写','path','连接共同点与空白']].map(([num,title,value,stage,tip])=>`<div class="path-stage"><span>${num}</span><h3>${title}</h3><strong>${value}</strong><p>${tip}</p>${stage!=='path'?`<button class="link-button" data-action="paper-path-filter" data-stage="${stage}">查看论文 →</button>`:''}</div>`).join('')}</div>`
+    + (next.length ? `<div class="path-next"><strong>下一步</strong><ul>${next.map(item=>`<li>${esc(item)}</li>`).join('')}</ul></div>` : '<div class="path-next complete"><strong>路径已完整</strong><p>研究问题、筛选、精读、综述和引用都已留下记录。</p></div>')
+    + `<section class="panel"><div class="section-head" style="margin-top:0"><h2>研究问题与范围 <span>本机保存</span></h2></div><form id="research-form" class="research-form">${[['question','研究问题','一句话写清要回答什么；避免把方法写成问题。'],['scope','范围与边界','时间、对象、情境、理论范围。'],['searchStrategy','检索策略','数据库、关键词、时间范围与筛选方式。'],['inclusion','纳入标准','什么论文算相关，为什么。'],['exclusion','排除标准','哪些情况排除，保留理由。'],['synthesis','综合论证','跨论文的共同点、分歧、证据强弱与研究空白。']].map(([name,label,hint])=>`<label class="field"><span>${label}</span><textarea name="${name}" rows="${name==='synthesis'?5:3}" placeholder="${hint}">${esc(research[name] || '')}</textarea></label>`).join('')}<div class="form-actions"><button class="button primary" type="submit">保存学术路径</button><span class="metadata">只保存在本机；不会自动调用模型。</span></div></form></section>`
+    + `<section class="panel"><div class="section-head" style="margin-top:0"><h2>综述矩阵 <span>${included.length} 篇已纳入</span></h2><div class="button-row"><button class="button small" data-action="export-matrix">导出 Markdown</button><button class="button small" data-action="export-papers-csv">导出 CSV</button><button class="button small" data-action="export-bibtex">BibTeX</button><button class="button small" data-action="export-ris">RIS</button></div></div>${included.length ? `<div class="matrix-wrap"><table class="matrix-table"><thead><tr><th>论文</th><th>研究问题</th><th>方法</th><th>数据 / 样本</th><th>主要发现</th><th>局限</th><th>关联</th></tr></thead><tbody>${included.map(p=>`<tr><td><button class="link-button" data-action="navigate" data-view="paper" data-id="${esc(p.id)}">${esc(p.title)}</button><small>${esc(paperVenueLine(p))}</small></td>${['question','method','data','findings','limitations','relevance'].map(key=>`<td>${p.review?.[key] ? esc(String(p.review[key]).replace(/\n/g,' ')) : '<span class="muted">待补</span>'}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : empty('综述矩阵还没有论文', '在论文详情把阶段改为“已纳入”，再补齐精读字段。', `<button class="button primary" data-action="navigate" data-view="papers">去论文库</button>`)}</section>`;
+}
+function paperPathPart(value) {
+  return String(value || '').split('/').map(encodeURIComponent).join('/');
+}
+function paperDetailPage() {
+  const p = paper(state.id);
+  if (!p) return empty('论文不存在', '它可能已被移除，返回论文库重新选择。', '<button class="button" data-action="navigate" data-view="papers">返回论文库</button>');
+  const bib = paperBibtex([p]);
+  const review = p.review || {};
+  const metaLinks = [
+    p.doi ? `<a href="https://doi.org/${paperPathPart(p.doi)}" target="_blank" rel="noopener noreferrer">DOI ↗</a>` : '',
+    p.arxivId ? `<a href="https://arxiv.org/abs/${paperPathPart(p.arxivId)}" target="_blank" rel="noopener noreferrer">arXiv ↗</a>` : '',
+    p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer">原文页面 ↗</a>` : '',
+    p.pdfUrl ? `<a href="${esc(p.pdfUrl)}" target="_blank" rel="noopener noreferrer">PDF ↗</a>` : '',
+  ].filter(Boolean).join(' · ');
+  return `<button class="back-button" data-action="navigate" data-view="papers">← 返回论文库</button>`
+    + heading('论文 / 学术路径', p.title, `${paperAuthors(p)} · ${paperVenueLine(p)}`, `<button class="button" data-action="edit-paper" data-id="${esc(p.id)}">编辑题录</button><button class="button danger" data-action="delete-paper" data-id="${esc(p.id)}">移除论文</button>`)
+    + `<div class="paper-detail-grid"><div><section class="panel"><div class="section-head" style="margin-top:0"><h2>题录与状态</h2><span class="small-label">${esc(p.source === 'manual' ? '手动题录' : (p.source || '本机记录'))}</span></div><p class="metadata">${esc(paperAuthors(p))} · ${esc(paperVenueLine(p))}${p.categoryId ? ' · ' + esc(pathName(p.categoryId)) : ''}</p><div class="paper-links">${metaLinks || '<span class="muted">还没有公开链接</span>'}</div><div class="paper-state-row"><span>阶段</span>${Object.entries(paperStages).map(([key,name])=>`<button class="filter-tab${p.stage===key?' selected':''}" data-action="paper-stage" data-id="${esc(p.id)}" data-stage="${key}">${name}</button>`).join('')}<label>阅读 <select data-paper-read="${esc(p.id)}">${Object.entries(paperReadStates).map(([key,name])=>`<option value="${key}"${p.readState===key?' selected':''}>${name}</option>`).join('')}</select></label></div></section><section class="panel"><div class="section-head" style="margin-top:0"><h2>摘要 <span>作者原文</span></h2></div>${p.abstract ? `<p class="paper-abstract-full">${esc(p.abstract)}</p>` : '<p class="metadata">还没有摘要，可在“编辑题录”中粘贴。</p>'}</section><section class="panel"><div class="section-head" style="margin-top:0"><h2>结构化精读 <span>${paperReviewCount(p)}/6 已填</span></h2></div><form id="paper-review-form">${paperReviewFields.map(([key,label])=>`<label class="field"><span>${label}</span><textarea name="${key}" rows="3" placeholder="把这篇论文放进你的研究问题里，而不是只抄摘要。">${esc(review[key] || '')}</textarea></label>`).join('')}<div class="form-actions"><button class="button primary" type="submit">保存精读</button></div></form></section><section class="panel"><div class="section-head" style="margin-top:0"><h2>证据与批注 <span>${(p.notes||[]).length} 条</span></h2><button class="button small soft" data-action="new-paper-note" data-id="${esc(p.id)}">＋ 添加摘录</button></div>${(p.notes||[]).length ? (p.notes||[]).slice().sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt))).map(n=>`<article class="paper-note-card"><div class="note-header"><span class="note-time">${n.page ? '第 '+Number(n.page)+' 页' : '页码未填'}</span><span class="note-date">${esc(String(n.createdAt||'').slice(0,10))}</span><button class="icon-button" data-action="edit-paper-note" data-id="${esc(p.id)}" data-note="${esc(n.id)}">编辑</button><button class="icon-button" data-action="delete-paper-note" data-id="${esc(p.id)}" data-note="${esc(n.id)}">移除</button></div>${n.quote ? `<blockquote>${esc(n.quote)}</blockquote>` : ''}${n.text ? `<p class="note-text">${esc(n.text)}</p>` : ''}</article>`).join('') : '<p class="metadata">还没有摘录。记录页码、原文和你的判断，综述时更容易回溯。</p>'}</section></div><aside><section class="panel"><div class="section-head" style="margin-top:0"><h2>引用</h2></div><pre class="paper-citation">${esc(bib)}</pre><div class="button-row"><button class="button small" data-action="copy-citation" data-id="${esc(p.id)}">复制 BibTeX</button><button class="button small" data-action="export-bibtex">下载全部</button></div></section><section class="panel"><div class="section-head" style="margin-top:0"><h2>路径提示</h2></div><p class="metadata">${p.stage==='included'?'已进入综述矩阵。继续补齐方法、发现和局限，并在学术路径写综合论证。':'把这篇论文推进到“已纳入”，才会进入综述矩阵和引用导出。'}</p><button class="button small soft" data-action="navigate" data-view="path">打开学术路径</button></section></aside></div>`;
+}
 function searchPage() {
   const terms = state.search.toLocaleLowerCase().split(/\s+/).filter(Boolean);
   const matches = text => terms.every(term => text.toLocaleLowerCase().includes(term));
   const categories = state.library.categories.filter(c => matches(pathName(c.id) + ' ' + c.description));
   const videos = state.library.videos.filter(v => matches([v.title,v.author,v.tags.join(' '),pathName(v.categoryId),v.summary,...v.notes.map(n=>n.text),v.knowledge ? JSON.stringify(v.knowledge.modules) : ''].join(' ')));
+  const papers = papersData().filter(p => matches([p.title,p.authors.join(' '),p.venue,p.abstract,p.keywords.join(' '),p.tags.join(' '),p.review ? Object.values(p.review).join(' ') : '',...(p.notes || []).map(n=>n.text + ' ' + n.quote)].join(' ')));
   const insights = (state.library.insights || []).filter(x=>matches(x.title+' '+x.content));
-  return heading('搜索我的知识库', `搜索“${state.search}”`, '搜索范围包含分类、视频标题、作者、标签、知识总结和时间点笔记。')
+  return heading('搜索我的知识库', `搜索“${state.search}”`, '搜索范围包含分类、视频标题、论文题录与摘要、作者、标签、知识总结和时间点笔记。')
     + (categories.length ? `<div class="section-head"><h2>相关分类</h2></div><div class="category-grid">${categories.map(categoryCard).join('')}</div>` : '')
     + `<div class="section-head"><h2>相关视频与笔记</h2></div>${videos.length ? `<div class="video-list">${videos.map(videoCard).join('')}</div>` : empty('没有找到匹配视频', '试试更短的关键词，或检查视频和笔记是否已经保存。')}`
+    + (papers.length ? `<div class="section-head"><h2>相关论文</h2></div><div class="paper-grid">${papers.map(paperCard).join('')}</div>` : '')
     + (insights.length ? '<div class="section-head"><h2>相关共通经验</h2></div>'+insights.map(insightCard).join('') : '');
 }
 function renderMain() {
@@ -262,10 +334,13 @@ function renderMain() {
   else if (state.view === 'setup') html = setupPage();
   else if (state.view === 'practice') html = practicePage(state.practiceData,state.library,state.practice);
   else if (state.view === 'insights') html = insightsPage();
+  else if (state.view === 'papers') html = papersPage();
+  else if (state.view === 'paper') html = paperDetailPage();
+  else if (state.view === 'path') html = academicPathPage();
   else if (state.view === 'videos') html = heading('我的视频库','全部视频','收藏有价值的课程，按照自己的节奏学习。',addVideoButton) + videoSection(state.library.videos);
   else html = homePage();
   $('#content').innerHTML = html;
-  const name = state.search ? '搜索' : state.view === 'category' ? pathName(state.id) : state.view === 'video' ? pathName(video(state.id).categoryId) + ' / 视频笔记' : ({home:'分类总览',videos:'全部视频',notes:'学习笔记',insights:'AI 总结与经验',knowledge:'知识模块',practice:'复习与自测',quality:'质量与来源',tasks:'整理任务',setup:'首次使用'}[state.view] || '分类总览');
+  const name = state.search ? '搜索' : state.view === 'category' ? pathName(state.id) : state.view === 'video' ? pathName(video(state.id).categoryId) + ' / 视频笔记' : state.view === 'paper' ? '论文 / ' + (paper(state.id)?.title || '详情') : ({home:'分类总览',videos:'全部视频',notes:'学习笔记',insights:'AI 总结与经验',knowledge:'知识模块',practice:'复习与自测',quality:'质量与来源',tasks:'整理任务',setup:'首次使用',papers:'论文知识库',path:'学术路径'}[state.view] || '分类总览');
   $('#breadcrumb').innerHTML = '我的学习空间 <span class="muted">/</span> <strong>' + esc(name) + '</strong>';
   if(state.view==='video' && state.pendingModule) {
     document.getElementById('module-'+state.pendingModule)?.scrollIntoView({block:'start'});
@@ -394,6 +469,96 @@ function noteModal(id) {
     target.updatedAt = now(); await save(next); toast('笔记已保存');
   });
 }
+const splitPaperList = value => [...new Set(String(value || '').split(/[,，;；、\n]/).map(item => item.trim()).filter(Boolean))];
+const splitPaperAuthors = value => [...new Set(String(value || '').split(/[;；\n]/).map(item => item.trim()).filter(Boolean))];
+function paperModal(id) {
+  const p = id ? paper(id) : {id:'', title:'', authors:[], year:'', venue:'', doi:'', arxivId:'', url:'', pdfUrl:'', abstract:'', keywords:[], tags:[], categoryId:'', stage:'candidate', readState:'unread', priority:0, source:'manual'};
+  if (!p) return;
+  showModal(id ? '编辑论文题录' : '加入论文知识库', '可以粘贴 DOI / arXiv 编号读取公开题录，也可以完全手动填写。网络查询只访问 Crossref / arXiv，不发送笔记。', `<form>
+    <div class="lookup-row"><label class="field"><span>DOI / arXiv / 对应链接</span><input name="query" maxlength="3000" placeholder="例如 10.1145/… 或 arXiv:2401.12345"></label><button type="button" class="button" data-action="paper-lookup">读取公开题录</button></div>
+    <p id="paper-lookup-status" class="metadata" role="status"></p>
+    <input type="hidden" name="source" value="${esc(p.source || 'manual')}">
+    <label class="field"><span>论文标题</span><input name="title" required maxlength="500" value="${esc(p.title)}"></label>
+    <div class="field-row"><label class="field"><span>作者（分号分隔）</span><input name="authors" maxlength="10000" value="${esc((p.authors || []).join('; '))}" placeholder="Ada Lovelace; Alan Turing"></label><label class="field"><span>年份</span><input name="year" type="number" min="0" max="3000" value="${p.year ?? ''}" placeholder="2024"></label></div>
+    <div class="field-row"><label class="field"><span>期刊 / 会议 / 出版方</span><input name="venue" maxlength="300" value="${esc(p.venue || '')}"></label><label class="field"><span>DOI</span><input name="doi" maxlength="300" value="${esc(p.doi || '')}" placeholder="10.1145/…"></label></div>
+    <div class="field-row"><label class="field"><span>arXiv 编号</span><input name="arxivId" maxlength="100" value="${esc(p.arxivId || '')}" placeholder="2401.12345"></label><label class="field"><span>放入分类</span><select name="categoryId"><option value="">未分类</option>${categoryOptions(p.categoryId)}</select></label></div>
+    <div class="field-row"><label class="field"><span>原文页面</span><input name="url" maxlength="3000" value="${esc(p.url || '')}" placeholder="https://…"></label><label class="field"><span>PDF 链接（选填）</span><input name="pdfUrl" maxlength="3000" value="${esc(p.pdfUrl || '')}" placeholder="https://…/paper.pdf"></label></div>
+    <div class="field-row"><label class="field"><span>阶段</span><select name="stage">${Object.entries(paperStages).map(([key,name])=>`<option value="${key}"${p.stage===key?' selected':''}>${name}</option>`).join('')}</select></label><label class="field"><span>阅读状态</span><select name="readState">${Object.entries(paperReadStates).map(([key,name])=>`<option value="${key}"${p.readState===key?' selected':''}>${name}</option>`).join('')}</select></label></div>
+    <div class="field-row"><label class="field"><span>优先级</span><select name="priority">${[0,1,2,3,4,5].map(n=>`<option value="${n}"${Number(p.priority)===n?' selected':''}>${n===0?'未设置':n+' / 5'}</option>`).join('')}</select></label><label class="field"><span>关键词（逗号分隔）</span><input name="keywords" maxlength="2000" value="${esc((p.keywords || []).join(', '))}"></label></div>
+    <label class="field"><span>标签（逗号分隔）</span><input name="tags" maxlength="1200" value="${esc((p.tags || []).join(', '))}"></label>
+    <label class="field"><span>摘要（可粘贴作者原文）</span><textarea name="abstract" rows="5" maxlength="30000">${esc(p.abstract || '')}</textarea></label>
+    ${actions(id ? '保存题录' : '加入论文库', id ? `<button type="button" class="button danger" data-action="delete-paper" data-id="${esc(id)}">移除论文</button>` : '')}
+  </form>`, async form => {
+    const title = form.get('title').trim();
+    if (!title) throw new Error('请填写论文标题');
+    const yearText = String(form.get('year') || '').trim();
+    const year = yearText ? Number(yearText) : null;
+    if (year !== null && (!Number.isInteger(year) || year < 0 || year > 3000)) throw new Error('年份格式不正确');
+    const next = structuredClone(state.library);
+    next.papers ||= [];
+    const item = {
+      ...(id ? p : {id:uid(), notes:[], review:{}, createdAt:now()}),
+      title, authors: splitPaperAuthors(form.get('authors')), year,
+      venue: form.get('venue').trim(), doi: form.get('doi').trim(), arxivId: form.get('arxivId').trim(),
+      url: form.get('url').trim(), pdfUrl: form.get('pdfUrl').trim(), abstract: form.get('abstract').trim(),
+      keywords: splitPaperList(form.get('keywords')), tags: splitPaperList(form.get('tags')),
+      categoryId: form.get('categoryId') || '', stage: form.get('stage'), readState: form.get('readState'),
+      priority: Number(form.get('priority')) || 0, source: form.get('source') || 'manual', updatedAt: now(),
+    };
+    if (id) next.papers[next.papers.findIndex(x=>x.id === id)] = item; else next.papers.push(item);
+    await save(next);
+    if (id) { renderAll(); toast('论文题录已保存'); } else { go('paper', item.id); toast('论文已加入知识库'); }
+  });
+}
+async function lookupPaper(button) {
+  const form = button.closest('form');
+  if (!form) return;
+  const query = String(form.elements.namedItem('query')?.value || '').trim();
+  const status = form.querySelector('#paper-lookup-status');
+  if (!query) { status.textContent = '请先输入 DOI 或 arXiv 编号。'; return; }
+  const label = button.textContent;
+  button.disabled = true; button.textContent = '读取中…';
+  if (status) { status.textContent = '正在读取公开元数据…'; status.classList.remove('error'); }
+  try {
+    const meta = await post('/api/papers/lookup', {query});
+    const values = {title:meta.title, authors:(meta.authors || []).join('; '), year:meta.year ?? '', venue:meta.venue || '', doi:meta.doi || '', arxivId:meta.arxivId || '', url:meta.url || '', pdfUrl:meta.pdfUrl || '', abstract:meta.abstract || '', keywords:(meta.keywords || []).join(', '), source:meta.source || 'manual'};
+    for (const [name, value] of Object.entries(values)) {
+      const field = form.elements.namedItem(name);
+      if (field) field.value = value;
+    }
+    if (status) status.textContent = `已从 ${meta.source || '公开题录'} 填入，请核对作者、年份和摘要。`;
+    toast('公开题录已填入，保存前请核对');
+  } catch (error) {
+    if (status) { status.textContent = error.message; status.classList.add('error'); }
+    toast(error.message, true);
+  } finally { button.disabled = false; button.textContent = label; }
+}
+function paperNoteModal(paperId, noteId) {
+  const p = paper(paperId);
+  if (!p) return;
+  const n = noteId ? (p.notes || []).find(x=>x.id === noteId) : {page:null, quote:'', text:''};
+  showModal(noteId ? '编辑论文摘录' : '记录证据与判断', '页码、原文摘录和你的解释会进入这篇论文的证据链，也可以导出到综述。', `<form><div class="field-row"><label class="field"><span>页码（选填）</span><input name="page" type="number" min="0" max="100000" value="${n.page ?? ''}"></label><span></span></div><label class="field"><span>原文摘录（选填）</span><textarea name="quote" rows="4" maxlength="5000" placeholder="逐字摘录关键句，保留页码依据。">${esc(n.quote || '')}</textarea></label><label class="field"><span>我的解释 / 关联（至少填一项）</span><textarea name="text" rows="5" maxlength="30000" placeholder="这段话支持什么？和你的研究问题有什么关系？">${esc(n.text || '')}</textarea></label>${actions(noteId ? '保存摘录' : '添加摘录')}</form>`, async form => {
+    const quote = form.get('quote').trim(), text = form.get('text').trim();
+    if (!quote && !text) throw new Error('原文摘录和解释至少填写一项');
+    const pageText = String(form.get('page') || '').trim();
+    const page = pageText ? Number(pageText) : null;
+    if (page !== null && (!Number.isInteger(page) || page < 0)) throw new Error('页码格式不正确');
+    const next = structuredClone(state.library), target = next.papers.find(x=>x.id === paperId);
+    const item = {id:noteId || uid(), page, quote, text, createdAt:noteId ? n.createdAt : now()};
+    target.notes ||= [];
+    if (noteId) target.notes[target.notes.findIndex(x=>x.id === noteId)] = item; else target.notes.push(item);
+    target.updatedAt = now(); await save(next); toast('论文摘录已保存');
+  });
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); toast('已复制到剪贴板'); }
+  catch { const area = document.createElement('textarea'); area.value = text; document.body.append(area); area.select(); const ok = document.execCommand('copy'); area.remove(); toast(ok ? '已复制到剪贴板' : '复制失败，请手动选择文本', !ok); }
+}
+function citationPapers() {
+  const included = papersData().filter(p=>p.stage === 'included');
+  if (!included.length) throw new Error('先把至少一篇论文纳入综述，再导出引用');
+  return included;
+}
 function confirmModal(title, description, callback) {
   showModal(title,description,`<form>${actions('确认')}</form>`,callback);
 }
@@ -416,8 +581,17 @@ function renderMarkdown(markdown) {
 function exportButtons(id='') {
   return `<button class="button soft" data-action="ipad-export" data-id="${esc(id)}">导出到 iPad 无边记</button>`;
 }
+function chapterPanel(v) {
+  const chapters = Array.isArray(v.transcriptInfo?.chapters) ? v.transcriptInfo.chapters : [];
+  if (!chapters.length) return '';
+  return `<details class="panel"><summary><strong>章节目录</strong> <span class="quality-meta">${chapters.length} 段 · 来自原视频</span></summary><ol class="help-list">${chapters.map(chapter => `<li><a class="note-time" href="${esc(jumpURL(v, chapter.start))}" target="_blank" rel="noopener noreferrer">${timeLabel(chapter.start)} ↗</a> ${esc(chapter.title)}</li>`).join('')}</ol><p class="metadata">点击时间可回到原视频；在“导出到 iPad 无边记”中可选择包含章节和完整字幕的讲义。</p></details>`;
+}
 function ipadExportModal(id='') {
-  showModal('带到 iPad，在无边记继续思考','导出仅使用已保存的笔记、补充和经验归纳，不包含原始字幕、账号或密钥。',`<div class="backup-option"><div><h3>无边记素材包 · 图片＋PDF</h3><p>每页一张清晰图片，带批注留白；解压后把所需图片拖进看板。</p></div><button class="button small primary" data-action="download-study" data-kind="freeform" data-video="${esc(id)}">下载素材包</button></div><div class="backup-option"><div><h3>阅读与归档 · PDF</h3><p>保留可选择的文字、视频来源链接和手写练习页。</p></div><button class="button small" data-action="download-study" data-kind="pdf" data-video="${esc(id)}">下载 PDF</button></div><ol class="help-list"><li>通过 AirDrop 或你自己的 iCloud 云盘传到 iPad。</li><li>在“文件”里轻点 ZIP 解压，分屏拖入 PNG 图片到无边记；也可插入 PDF 作为附件。</li><li>用 Apple Pencil 或手指在画布上添加手写、文本和连线。</li></ol><p class="modal-description" style="margin-top:14px">图片里的文字不能直接编辑。无边记中的批注由无边记保存，不会自动回写本网站；AI 原稿会继续留在知识库。</p><div class="modal-actions"><button class="button" data-action="close-modal">完成</button></div>`);
+  const v = id ? video(id) : null;
+  const hasTranscript = !!(v && String(v.transcript || '').trim().length >= 20);
+  const chapterCount = Number(v?.transcriptInfo?.chapters?.length || 0);
+  const full = id && hasTranscript ? `<div class="backup-option"><div><h3>完整视频讲义 · 章节＋时间轴字幕</h3><p>含封面、AI 笔记、章节目录和完整字幕；可点击时间码回到原视频。素材包同时包含 PDF、逐页 PNG 和 Markdown 讲义。</p><p class="metadata">${chapterCount ? '已识别 '+chapterCount+' 个原视频章节。' : '没有原视频章节时，会按已保存模块的原文依据生成；仍无法定位时保留完整字幕。'}</p></div><div class="button-row"><button class="button small primary" data-action="download-study" data-kind="handout" data-video="${esc(id)}">下载讲义 PDF</button><button class="button small" data-action="download-study" data-kind="handout-freeform" data-video="${esc(id)}">下载讲义素材包</button></div></div>` : id ? '<p class="metadata">还没有可导出的完整字幕。先在“质量与来源”中获取原字幕或本机转录，或导入字幕文件，再生成完整讲义。</p>' : '<p class="metadata">完整视频讲义请进入单门课程后导出，避免一次生成过多图片。</p>';
+  showModal('带到 iPad，在无边记继续思考','默认只导出 AI 笔记、补充和经验归纳。选择“完整视频讲义”时，才会把你主动保存的原始字幕放进 PDF/图片；账号和密钥不会进入文件。',`<div class="backup-option"><div><h3>AI 笔记素材包 · 图片＋PDF</h3><p>每页一张清晰图片，带批注留白；解压后把所需图片拖进看板。</p></div><button class="button small primary" data-action="download-study" data-kind="freeform" data-video="${esc(id)}">下载素材包</button></div><div class="backup-option"><div><h3>AI 笔记阅读版 · PDF</h3><p>保留可选择的文字、视频来源链接和手写练习页。</p></div><button class="button small" data-action="download-study" data-kind="pdf" data-video="${esc(id)}">下载 PDF</button></div>${full}<ol class="help-list"><li>通过 AirDrop 或你自己的 iCloud 云盘传到 iPad，也可用其他方式传到电脑。</li><li>在“文件”里轻点 ZIP 解压，分屏拖入 PNG 图片到无边记；也可插入 PDF 作为附件。</li><li>用 Apple Pencil 或手指在画布上添加手写、文本和连线；GoodNotes、Notability 等支持 PDF 的 App 也能导入。</li></ol><p class="modal-description" style="margin-top:14px">无边记没有公开的直接写入格式，所以这里用 PDF/逐页 PNG 导入。图片里的文字不能直接编辑；无边记中的批注不会自动回写本网站。</p><div class="modal-actions"><button class="button" data-action="close-modal">完成</button></div>`);
 }
 async function downloadStudy(kind,id,button) {
   const label=button.textContent;button.disabled=true;button.textContent='正在生成…';
@@ -425,8 +599,9 @@ async function downloadStudy(kind,id,button) {
     const response=await apiFetch('/api/export?format='+encodeURIComponent(kind)+(id?'&videoId='+encodeURIComponent(id)+'&language='+encodeURIComponent(effectiveLanguage(video(id),state.noteLanguages[id] || 'zh-CN')):''));
     if(!response.ok) {const result=await response.json();throw new Error(result.error || '导出失败');}
     const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');
-    link.href=url;link.download=kind==='freeform'?'无边记学习素材.zip':'AI学习笔记.pdf';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
-    toast('文件已生成，请保存后传到 iPad');
+    const names={pdf:'AI学习笔记.pdf',freeform:'无边记学习素材.zip',handout:'完整视频讲义.pdf','handout-freeform':'完整视频讲义_无边记素材.zip'};
+    link.href=url;link.download=names[kind] || '学习笔记.pdf';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+    toast(kind.startsWith('handout')?'完整讲义已生成，请保存后导入无边记或笔记软件':'文件已生成，请保存后传到 iPad');
   } finally {button.disabled=false;button.textContent=label;}
 }
 function batchAIModal() {
@@ -440,7 +615,7 @@ function batchAIModal() {
 }
 
 function backupModal() {
-  showModal('导出与备份', '个人学习文件请自行保管，导出不会上传到 GitHub。', `<div class="backup-option"><div><h3>iPad 无边记 · PDF 与图片</h3><p>AI 笔记带手写留白，图片可拖进无边记画布。</p></div><button class="button small primary" data-action="ipad-export">选择导出</button></div><div class="backup-option"><div><h3>完整备份 · JSON</h3><p>包含分类、视频、知识模块、全部笔记与自测记录。</p></div><button class="button small" data-action="export-json">导出 JSON</button></div><div class="backup-option"><div><h3>阅读版 · Markdown</h3><p>包含详尽模块、脑图大纲、自查与个人作答。</p></div><button class="button small" data-action="export-markdown">导出笔记</button></div><div class="backup-option"><div><h3>从备份合并导入</h3><p>保留当前资料，重复链接保留当前版本。</p></div><button class="button small" data-action="import">选择 JSON</button></div><p class="modal-description">每次保存前还会自动保留一个本机备份，最近 30 份位于 data/.backups。备份仅保存在这台电脑，记得另存完整 JSON。</p><div class="modal-actions"><button class="button" data-action="close-modal">完成</button></div>`);
+  showModal('导出与备份', '个人学习文件请自行保管，导出不会上传到 GitHub。', `<div class="backup-option"><div><h3>iPad 无边记 · PDF 与图片</h3><p>AI 笔记带手写留白；单门课程还可导出含章节与完整字幕的讲义。</p></div><button class="button small primary" data-action="ipad-export">选择导出</button></div><div class="backup-option"><div><h3>完整备份 · JSON</h3><p>包含分类、视频、论文、学术路径、知识模块、全部笔记与自测记录。</p></div><button class="button small" data-action="export-json">导出 JSON</button></div><div class="backup-option"><div><h3>阅读版 · Markdown</h3><p>包含课程笔记、论文精读与学术路径。</p></div><button class="button small" data-action="export-markdown">导出笔记</button></div><div class="backup-option"><div><h3>论文引用 · BibTeX / RIS</h3><p>导出已纳入综述的论文，便于 Zotero、EndNote 或 LaTeX 使用。</p></div><div class="button-row"><button class="button small" data-action="export-bibtex">BibTeX</button><button class="button small" data-action="export-ris">RIS</button></div></div><div class="backup-option"><div><h3>从备份合并导入</h3><p>保留当前资料，重复视频和论文保留当前版本。</p></div><button class="button small" data-action="import">选择 JSON</button></div><p class="modal-description">每次保存前还会自动保留一个本机备份，最近 30 份位于 data/.backups。备份仅保存在这台电脑，记得另存完整 JSON。</p><div class="modal-actions"><button class="button" data-action="close-modal">完成</button></div>`);
 }
 function download(filename, content, mime) {
   const url = URL.createObjectURL(new Blob([content], {type:mime}));
@@ -484,13 +659,28 @@ function prepareImport(incoming) {
     next.insights.push({...item,id:uid(),sources:(item.sources || []).map(s=>({...s,videoId:videoIds.get(s.videoId)||s.videoId}))});
   }
   next.learning=mergePracticeAttempts(next.learning,incoming.learning,videoIds);
-  return {next,added,skipped,categories:next.categories.length-state.library.categories.length};
+  next.papers ||= [];
+  if(incoming.papers !== undefined && (!Array.isArray(incoming.papers) || incoming.papers.length > 10000)) throw new Error('论文备份格式不正确');
+  const paperKey = p => String(p.doi || p.arxivId || (p.title + '|' + (p.year ?? ''))).toLowerCase();
+  const existingPaperKeys = new Set(next.papers.map(paperKey));
+  let papersAdded = 0;
+  for(const source of incoming.papers || []) {
+    const key = paperKey(source);
+    if(existingPaperKeys.has(key)) continue;
+    const newId = uid();
+    next.papers.push({...source, id:newId, categoryId: source.categoryId ? (ids.get(source.categoryId) || '') : '', notes:(source.notes || []).map(n=>({...n,id:uid()}))});
+    existingPaperKeys.add(key); papersAdded++;
+  }
+  next.research ||= {};
+  const hasResearch = ['question','scope','searchStrategy','inclusion','exclusion','synthesis'].some(key => String(next.research[key] || '').trim());
+  if(!hasResearch && incoming.research) next.research = {...incoming.research};
+  return {next,added,skipped,categories:next.categories.length-state.library.categories.length,papersAdded};
 }
 
 document.addEventListener('click', async event => {
   const button = event.target.closest('[data-action]');
   if(!button || button.disabled) return;
-  const {action,id,view,status,tag} = button.dataset;
+  const {action,id,view,status,tag,stage,note} = button.dataset;
   try {
     if(action==='navigate') go(view,id);
     else if(action==='close-modal') modal.close();
@@ -512,6 +702,27 @@ document.addEventListener('click', async event => {
     else if(action==='edit-video') videoModal(id);
     else if(action==='new-note') noteModal();
     else if(action==='edit-note') noteModal(id);
+    else if(action==='new-paper') paperModal();
+    else if(action==='edit-paper') paperModal(id);
+    else if(action==='paper-lookup') await lookupPaper(button);
+    else if(action==='paper-filter') {state.paperFilter=stage;renderMain();}
+    else if(action==='paper-path-filter') {go('papers');state.paperFilter=stage;renderMain();}
+    else if(action==='paper-stage') {
+      const next=structuredClone(state.library),p=next.papers.find(x=>x.id===id);p.stage=stage;p.updatedAt=now();await save(next);toast('论文阶段已更新为「'+paperStages[stage]+'」');
+    }
+    else if(action==='new-paper-note') paperNoteModal(id);
+    else if(action==='edit-paper-note') paperNoteModal(id,note);
+    else if(action==='delete-paper-note') confirmModal('移除这条论文摘录？','删除前会自动保留本机备份。',async()=>{
+      const next=structuredClone(state.library),p=next.papers.find(x=>x.id===id);p.notes=p.notes.filter(n=>n.id!==note);p.updatedAt=now();await save(next);toast('论文摘录已移除');
+    });
+    else if(action==='delete-paper') confirmModal('移除这篇论文？','题录、精读和摘录会一起移除；删除前会自动保留本机备份。',async()=>{
+      const next=structuredClone(state.library);next.papers=next.papers.filter(p=>p.id!==id);await save(next);go('papers');toast('论文已移除');
+    });
+    else if(action==='copy-citation') await copyText(paperBibtex([paper(id)]));
+    else if(action==='export-bibtex') {const selected=citationPapers();download('references.bib',paperBibtex(selected),'text/plain;charset=utf-8');toast('已导出 '+selected.length+' 篇已纳入论文的 BibTeX');}
+    else if(action==='export-ris') {const selected=citationPapers();download('references.ris',paperRis(selected),'text/plain;charset=utf-8');toast('已导出 RIS');}
+    else if(action==='export-papers-csv') {const selected=citationPapers();download('论文综述矩阵.csv',papersCsv(selected),'text/csv;charset=utf-8');toast('已导出综述矩阵 CSV');}
+    else if(action==='export-matrix') {download('论文综述矩阵.md',researchMarkdown(state.library),'text/markdown;charset=utf-8');toast('已导出综述 Markdown');}
     else if(action==='filter') {state.status=status;renderMain();}
     else if(action==='filter-favorites') {state.favorites=!state.favorites;renderMain();}
     else if(action==='search-tag') {$('#search').value=tag;state.search=tag;renderAll();}
@@ -520,7 +731,7 @@ document.addEventListener('click', async event => {
       v.favorite=!v.favorite; await save(next); toast(v.favorite ? '已加入重点收藏' : '已取消重点收藏');
     }
     else if(action==='delete-category') {
-      if(children(id).length || state.library.videos.some(v=>v.categoryId===id)) throw new Error('请先移动分类里的视频和子分类，再删除这个空分类');
+      if(children(id).length || state.library.videos.some(v=>v.categoryId===id) || papersData().some(p=>p.categoryId===id)) throw new Error('请先移动分类里的视频、论文和子分类，再删除这个空分类');
       confirmModal('删除这个空分类？',category(id).name+'。删除前会自动保留本机备份。',async()=>{
         const next=structuredClone(state.library);next.categories=next.categories.filter(c=>c.id!==id);
         if(state.view==='category'&&state.id===id) {state.view='home';state.id=null;}
@@ -537,6 +748,11 @@ document.addEventListener('click', async event => {
       v.notes=v.notes.filter(n=>n.id!==id);v.updatedAt=now();await save(next);toast('笔记已移除');
     });
     else if(action==='backup') backupModal();
+    else if(action==='lan-logout') {
+      if(!window.confirm('退出局域网登录？这台设备下次需要重新输入登录码。')) return;
+      await fetch('/api/session/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      location.replace('/');
+    }
     else if(action==='ipad-export') ipadExportModal(id || '');
     else if(action==='download-study') await downloadStudy(button.dataset.kind,button.dataset.video || '',button);
     else if(action==='batch-ai') batchAIModal();
@@ -547,21 +763,39 @@ document.addEventListener('click', async event => {
 });
 
 document.addEventListener('submit',async event=>{
-  if(event.target.id!=='summary-form') return;
+  const formId=event.target.id;
+  if(!['summary-form','paper-review-form','research-form'].includes(formId)) return;
   event.preventDefault();
   const button=event.target.querySelector('[type="submit"]');button.disabled=true;
   try {
-    const next=structuredClone(state.library),v=next.videos.find(x=>x.id===state.id);
-    v.summary=new FormData(event.target).get('summary').trim();delete v.cornell;v.updatedAt=now();
-    await save(next);toast('知识总结已保存');
+    const next=structuredClone(state.library);
+    if(formId==='summary-form') {
+      const v=next.videos.find(x=>x.id===state.id);
+      v.summary=new FormData(event.target).get('summary').trim();delete v.cornell;v.updatedAt=now();
+      await save(next);toast('知识总结已保存');
+    } else if(formId==='paper-review-form') {
+      const p=next.papers.find(x=>x.id===state.id);p.review=p.review || {};
+      for(const [key] of paperReviewFields) p.review[key]=String(new FormData(event.target).get(key) || '').trim();
+      p.updatedAt=now();await save(next);toast('结构化精读已保存');
+    } else {
+      next.research=next.research || {};
+      for(const key of ['question','scope','searchStrategy','inclusion','exclusion','synthesis']) next.research[key]=String(new FormData(event.target).get(key) || '').trim();
+      next.research.updatedAt=now();await save(next);toast('学术路径已保存');
+    }
   } catch(error) {toast(error.message,true);button.disabled=false;}
 });
 document.addEventListener('change',async event=>{
-  if(event.target.id!=='detail-status') return;
-  try {
-    const next=structuredClone(state.library),v=next.videos.find(x=>x.id===state.id);
-    v.status=event.target.value;v.updatedAt=now();await save(next);toast('学习状态已保存');
-  } catch(error) {event.target.value=video(state.id).status;toast(error.message,true);}
+  if(event.target.id==='detail-status') {
+    try {
+      const next=structuredClone(state.library),v=next.videos.find(x=>x.id===state.id);
+      v.status=event.target.value;v.updatedAt=now();await save(next);toast('学习状态已保存');
+    } catch(error) {event.target.value=video(state.id).status;toast(error.message,true);}
+  } else if(event.target.dataset.paperRead) {
+    try {
+      const next=structuredClone(state.library),p=next.papers.find(x=>x.id===event.target.dataset.paperRead);
+      p.readState=event.target.value;p.updatedAt=now();await save(next);toast('阅读状态已保存');
+    } catch(error) {toast(error.message,true);}
+  }
 });
 $('#search').addEventListener('input',event=>{state.search=event.target.value.trim();renderAll();});
 document.addEventListener('keydown',event=>{
@@ -572,7 +806,7 @@ $('#import-file').addEventListener('change',async event=>{
   try {
     if(file.size>4*1024*1024) throw new Error('备份最多支持 4 MB');
     const result=prepareImport(JSON.parse(await file.text()));
-    confirmModal('合并这份备份？',`将新增 ${result.categories} 个分类、${result.added} 个视频；跳过 ${result.skipped} 个重复链接，保留当前版本。`,async()=>{await save(result.next);toast('备份已合并');});
+    confirmModal('合并这份备份？',`将新增 ${result.categories} 个分类、${result.added} 个视频、${result.papersAdded || 0} 篇论文；跳过 ${result.skipped} 个重复视频，保留当前版本。`,async()=>{await save(result.next);toast('备份已合并');});
   } catch(error) {toast(error instanceof SyntaxError ? '这个文件不是有效的 JSON' : error.message,true);}
 });
 window.addEventListener('hashchange',route);
@@ -731,7 +965,7 @@ document.addEventListener('click',async event=>{
     else if(action==='fetch-transcript') {
       button.disabled=true;button.textContent='正在获取原字幕或本机转录…';
       const result=await post('/api/ai/transcript',{videoId:id});
-      const next=structuredClone(state.library),v=next.videos.find(v=>v.id===id);v.transcript=result.transcript;v.transcriptInfo={kind:result.kind || 'captions',source:result.source || '取得的学习资料',language:result.language || '',createdAt:result.createdAt || now()};v.updatedAt=now();await save(next);toast(result.partial?'已保存取得的字幕；部分语言未成功，请核对内容':'字幕已保存，可以使用 AI 整理');
+      const next=structuredClone(state.library),v=next.videos.find(v=>v.id===id);v.transcript=result.transcript;v.transcriptInfo={kind:result.kind || 'captions',source:result.source || '取得的学习资料',language:result.language || '',createdAt:result.createdAt || now(),...(Array.isArray(result.timeline)&&result.timeline.length?{timeline:result.timeline}:{}),...(Array.isArray(result.chapters)&&result.chapters.length?{chapters:result.chapters}:{})};v.updatedAt=now();await save(next);toast(result.partial?'已保存取得的字幕；部分语言未成功，请核对内容':'字幕已保存，可以导出完整视频讲义或使用 AI 整理');
     }
     else if(action==='delete-insight') confirmModal('移除这篇经验归纳？','移除前会自动保留本机备份，原视频与笔记会保留。',async()=>{const next=structuredClone(state.library);next.insights=next.insights.filter(x=>x.id!==id);await save(next);toast('经验归纳已移除');});
     else if(action==='youtube') await youtubeModal();
@@ -750,7 +984,7 @@ document.addEventListener('click',async event=>{
 document.addEventListener('submit',async event=>{
   if(!event.target.dataset.transcriptForm) return;
   event.preventDefault();const button=event.target.querySelector('[type="submit"]');button.disabled=true;
-  try {const next=structuredClone(state.library),v=next.videos.find(x=>x.id===event.target.dataset.transcriptForm);v.transcript=new FormData(event.target).get('transcript');v.transcriptInfo={kind:'imported',source:'手动提供的学习资料',language:'',createdAt:now()};v.updatedAt=now();await save(next);toast('学习资料已保存');}
+  try {const next=structuredClone(state.library),v=next.videos.find(x=>x.id===event.target.dataset.transcriptForm);v.transcript=new FormData(event.target).get('transcript');const previous=v.transcriptInfo||{};v.transcriptInfo={kind:'imported',source:'手动提供的学习资料',language:previous.language||'',createdAt:now(),...(Array.isArray(previous.chapters)&&previous.chapters.length?{chapters:previous.chapters}:{})};v.updatedAt=now();await save(next);toast('学习资料已保存；手动修改后旧时间轴已清除');}
   catch(error) {toast(error.message,true);button.disabled=false;}
 });
 $('#youtube-client-file').addEventListener('change',async event=>{

@@ -1,7 +1,9 @@
 """本机 Web 边界、请求限流、凭据重定向与受限公开资源读取。"""
+import ipaddress
 import json
 import os
 import re
+import socket
 import threading
 import time
 from collections import deque
@@ -35,9 +37,49 @@ class RateLimiter:
             bucket.append(now); return True
 
 
-def local_boundary(headers, port, method, path):
+def _split_host(value, port):
+    value = str(value or '').strip()
+    if value.startswith('['):
+        end = value.find(']')
+        if end < 0:
+            return None
+        host = value[1:end].lower()
+        rest = value[end + 1:]
+        if rest and (not rest.startswith(':') or not rest[1:].isdigit() or int(rest[1:]) != port):
+            return None
+        return host
+    if value.count(':') > 1:
+        return None
+    if ':' in value:
+        host, raw_port = value.rsplit(':', 1)
+        if not raw_port.isdigit() or int(raw_port) != port:
+            return None
+        return host.lower()
+    return None
+
+
+def _lan_host(host):
+    if host in {'127.0.0.1', 'localhost', '::1'}:
+        return True
+    if host.endswith('.local') and len(host) > 6:
+        return True
+    if host == socket.gethostname().lower():
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    if address.is_loopback or address.is_private or address.is_link_local:
+        return True
+    return isinstance(address, ipaddress.IPv4Address) and address in ipaddress.ip_network('100.64.0.0/10')
+
+
+def local_boundary(headers, port, method, path, lan=False):
     hosts = headers.get_all('Host', [])
-    if len(hosts) != 1 or hosts[0] not in {'127.0.0.1:' + str(port), 'localhost:' + str(port)}:
+    if len(hosts) != 1:
+        return False
+    host = _split_host(hosts[0], port)
+    if not host or not (_lan_host(host) if lan else host in {'127.0.0.1', 'localhost'}):
         return False
     callback = path == '/api/youtube/callback' and method == 'GET' and headers.get('Sec-Fetch-Mode') == 'navigate' and headers.get('Sec-Fetch-Dest') == 'document'
     origins = headers.get_all('Origin', [])
@@ -73,7 +115,7 @@ def public_url(url, domains):
     if (len(url) > 20000 or parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password
             or parsed.port not in {None, 443} or any(ord(c) < 33 for c in url)
             or not any(parsed.hostname == d or parsed.hostname.endswith('.' + d) for d in domains)):
-        raise ValueError('外部资料地址不在允许的视频平台范围内')
+        raise ValueError('外部资料地址不在允许范围内')
     return url
 
 

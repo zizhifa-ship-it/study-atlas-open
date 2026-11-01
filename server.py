@@ -7,10 +7,12 @@ if sys.version_info < (3, 9):
     raise SystemExit('Study Atlas requires Python 3.9 or newer: https://www.python.org/downloads/')
 import copy
 import errno
+import ipaddress
 import json
 import os
 import re
 import secrets
+import socket
 import tempfile
 import threading
 import webbrowser
@@ -22,18 +24,26 @@ from integrations import Integrations, IntegrationError
 from importer import AutoImporter
 from note_results import persist_generation
 from pdf_export import export_notes
+from papers import lookup_paper
 from knowledge import validate_knowledge
 from practice import validate_learning, practice_overview, grade_answer
 from note_layout import clean_cornell
 from video_media import validate_thumbnail, validate_visuals, ASSET
 from note_translations import validate_translations, LANGUAGES
 from security import SECURITY_HEADERS, RateLimiter, local_boundary, strict_json
+from lan_auth import LanAuth
 from materials import is_material_url
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 4 * 1024 * 1024
 COLORS = {"green", "blue", "purple", "orange"}
 STATUSES = {"todo", "learning", "done"}
+PAPER_STAGES = {"candidate", "screening", "included", "excluded"}
+PAPER_READ_STATES = {"unread", "reading", "read"}
+RESEARCH_FIELDS = {"question": 5000, "scope": 5000, "searchStrategy": 5000,
+                   "inclusion": 5000, "exclusion": 5000, "synthesis": 30000}
+PAPER_REVIEW_FIELDS = {"question": 5000, "method": 5000, "data": 5000,
+                       "findings": 5000, "limitations": 5000, "relevance": 5000}
 
 
 class ValidationError(ValueError):
@@ -77,6 +87,130 @@ def clean_automation(value):
     require(not task or task in TASK_NAMES or task.startswith('translate:') and task[10:] in LANGUAGES, '整理任务类型不正确')
     return {"status": status, "message": string(value.get("message", ""), "整理说明", 1000, True),
             "model": string(value.get("model", ""), "整理模型", 200, True), **({'task': task} if task else {})}
+
+
+def clean_transcript_info(value, transcript):
+    require(isinstance(value, dict) and value.get('kind') in {'captions', 'asr', 'imported'}, '资料来源格式不正确')
+    clean = {'kind': value['kind'], 'source': string(value.get('source'), '资料来源', 200),
+             'language': string(value.get('language', ''), '资料语言', 50, True),
+             'createdAt': string(value.get('createdAt', ''), '资料时间', 50, True)}
+    chapters = value.get('chapters')
+    if isinstance(chapters, list):
+        result, starts = [], set()
+        for item in chapters[:80]:
+            if not isinstance(item, dict):
+                continue
+            title, start = item.get('title'), item.get('start')
+            if not isinstance(title, str) or not title.strip() or len(title.strip()) > 200:
+                continue
+            if type(start) is not int or not 0 <= start <= 3600000 or start in starts:
+                continue
+            starts.add(start)
+            result.append({'start': start, 'title': title.strip()})
+        result.sort(key=lambda item: item['start'])
+        if result:
+            clean['chapters'] = result[:50]
+    timeline = value.get('timeline')
+    lines = transcript.splitlines()
+    if isinstance(timeline, list) and 0 < len(timeline) <= 5000 and len(timeline) == len(lines):
+        if all(type(second) is int and 0 <= second <= 3600000 for second in timeline) and all(first <= second for first, second in zip(timeline, timeline[1:])):
+            clean['timeline'] = timeline
+    return clean
+
+
+def clean_web_url(value, label, limit=3000):
+    value = string(value, label, limit, True)
+    if not value:
+        return ''
+    parsed = urlsplit(value)
+    require(parsed.scheme in {'http', 'https'} and bool(parsed.hostname)
+            and not parsed.username and not parsed.password, label + '格式不正确')
+    return value
+
+
+def clean_text_list(value, label, limit, item_limit):
+    require(isinstance(value, list) and len(value) <= limit, label + '格式不正确或数量过多')
+    result = []
+    for item in value:
+        text = string(item, label, item_limit).strip()
+        if text and text not in result:
+            result.append(text)
+    return result
+
+
+def clean_research(value):
+    require(isinstance(value, dict), '学术路径格式不正确')
+    result = {key: string(value.get(key, ''), key, limit, True, preserve=True) for key, limit in RESEARCH_FIELDS.items()}
+    result['updatedAt'] = string(value.get('updatedAt', ''), '学术路径更新时间', 50, True)
+    return result
+
+
+def clean_papers(value, category_ids):
+    require(isinstance(value, list) and len(value) <= 10000, '论文格式不正确或数量过多')
+    result, ids = [], set()
+    for paper in value:
+        require(isinstance(paper, dict), '论文格式不正确')
+        pid = identifier(paper.get('id'))
+        require(pid not in ids, '论文编号重复')
+        ids.add(pid)
+        authors = clean_text_list(paper.get('authors', []), '作者', 50, 200)
+        keywords = clean_text_list(paper.get('keywords', []), '关键词', 30, 60)
+        tags = clean_text_list(paper.get('tags', []), '论文标签', 20, 60)
+        category_id = paper.get('categoryId') or ''
+        if category_id:
+            category_id = identifier(category_id)
+            require(category_id in category_ids, '论文分类不存在')
+        year = paper.get('year')
+        if year in (None, ''):
+            year = None
+        else:
+            year = integer(year, '论文年份', 3000)
+        doi = string(paper.get('doi', ''), 'DOI', 300, True)
+        doi = re.sub(r'^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)', '', doi, flags=re.I).strip()
+        require(not doi or re.fullmatch(r'10\.\d{4,9}/\S+', doi), 'DOI 格式不正确')
+        arxiv_id = string(paper.get('arxivId', ''), 'arXiv 编号', 100, True)
+        require(not arxiv_id or re.fullmatch(r'[A-Za-z0-9.\-/]+', arxiv_id), 'arXiv 编号格式不正确')
+        stage = paper.get('stage', 'candidate')
+        require(stage in PAPER_STAGES, '论文阶段不正确')
+        read_state = paper.get('readState', 'unread')
+        require(read_state in PAPER_READ_STATES, '论文阅读状态不正确')
+        review = paper.get('review') or {}
+        require(isinstance(review, dict), '论文精读格式不正确')
+        clean_review = {key: string(review.get(key, ''), '论文精读', limit, True, preserve=True)
+                        for key, limit in PAPER_REVIEW_FIELDS.items()}
+        notes = paper.get('notes', [])
+        require(isinstance(notes, list) and len(notes) <= 500, '论文笔记格式不正确或数量过多')
+        clean_notes, note_ids = [], set()
+        for note in notes:
+            require(isinstance(note, dict), '论文笔记格式不正确')
+            nid = identifier(note.get('id'))
+            require(nid not in note_ids, '论文笔记编号重复')
+            note_ids.add(nid)
+            page = note.get('page')
+            if page in (None, ''):
+                page = None
+            else:
+                page = integer(page, '论文页码', 100000)
+            quote = string(note.get('quote', ''), '论文摘录', 5000, True, preserve=True)
+            text = string(note.get('text', ''), '论文笔记', 30000, True, preserve=True)
+            require(quote.strip() or text.strip(), '论文笔记不能为空')
+            clean_notes.append({'id': nid, 'page': page, 'quote': quote, 'text': text,
+                                'createdAt': string(note.get('createdAt', ''), '论文笔记时间', 50, True)})
+        result.append({
+            'id': pid, 'title': string(paper.get('title'), '论文标题', 500),
+            'authors': authors, 'year': year, 'venue': string(paper.get('venue', ''), '期刊或会议', 300, True),
+            'doi': doi, 'arxivId': arxiv_id, 'url': clean_web_url(paper.get('url', ''), '论文链接'),
+            'pdfUrl': clean_web_url(paper.get('pdfUrl', ''), '论文 PDF 链接'),
+            'abstract': string(paper.get('abstract', ''), '论文摘要', 30000, True, preserve=True),
+            'keywords': keywords, 'tags': tags, 'categoryId': category_id,
+            'stage': stage, 'readState': read_state,
+            'priority': integer(paper.get('priority', 0), '论文优先级', 5),
+            'source': string(paper.get('source', ''), '元数据来源', 100, True),
+            'review': clean_review, 'notes': clean_notes,
+            'createdAt': string(paper.get('createdAt', ''), '论文创建时间', 50, True),
+            'updatedAt': string(paper.get('updatedAt', ''), '论文更新时间', 50, True),
+        })
+    return result
 
 
 def validate_library(payload):
@@ -174,11 +308,7 @@ def validate_library(payload):
         if video.get('cornell') is not None:
             clean_videos[-1]['cornell'] = clean_cornell(video['cornell'])
         if video.get('transcriptInfo') is not None:
-            info = video['transcriptInfo']
-            require(isinstance(info, dict) and info.get('kind') in {'captions', 'asr', 'imported'}, '资料来源格式不正确')
-            clean_videos[-1]['transcriptInfo'] = {'kind': info['kind'], 'source': string(info.get('source'), '资料来源', 200),
-                'language': string(info.get('language', ''), '资料语言', 50, True),
-                'createdAt': string(info.get('createdAt', ''), '资料时间', 50, True)}
+            clean_videos[-1]['transcriptInfo'] = clean_transcript_info(video['transcriptInfo'], clean_videos[-1]['transcript'])
         if video.get('translations') is not None:
             clean_videos[-1]['translations'] = validate_translations(video['translations'], clean_videos[-1])
     insights = payload.get("insights", [])
@@ -208,6 +338,8 @@ def validate_library(payload):
                                "createdAt": string(item.get("createdAt", ""), "生成时间", 50, True)})
     return {"schemaVersion": 1, "revision": revision,
             "categories": clean_categories, "videos": clean_videos, "insights": clean_insights,
+            "papers": clean_papers(payload.get("papers", []), category_ids),
+            "research": clean_research(payload.get("research") or {}),
             "learning": validate_learning(payload.get("learning"))}
 
 
@@ -226,9 +358,11 @@ class LibraryStore:
     def save(self, payload):
         with self.lock:
             current = self.read()
-            # 旧页面或旧备份没有 learning 字段时，不清空新版本的练习记录。
-            if isinstance(payload, dict) and "learning" not in payload:
-                payload = dict(payload, learning=current["learning"])
+            # 旧页面或旧备份缺少这些扩展字段时，不清空已有记录。
+            if isinstance(payload, dict):
+                preserved = {key: current[key] for key in ('learning', 'papers', 'research') if key not in payload}
+                if preserved:
+                    payload = dict(payload, **preserved)
             clean = validate_library(payload)
             if clean["revision"] != current["revision"]:
                 raise ConflictError("数据已在另一个页面更新。请刷新后再修改；当前填写内容还在窗口中。")
@@ -259,7 +393,7 @@ class LibraryStore:
             return copy.deepcopy(clean)
 
 
-def make_handler(store, integrations=None):
+def make_handler(store, integrations=None, lan=False, auth=None):
     integrations = integrations or Integrations(store.path.parent / "test-integrations")
     importer = AutoImporter(store, integrations)
     security_token, limiter = secrets.token_hex(32), RateLimiter()
@@ -276,7 +410,7 @@ def make_handler(store, integrations=None):
             safe = tuple(re.sub(r'[\x00-\x1f\x7f-\x9f]', '?', re.sub(r'\?\S+', '?[hidden]', str(a)))[:1000] for a in args)
             super().log_message(message, *safe)
 
-        def respond(self, code, body, content_type="application/json; charset=utf-8", filename=None):
+        def respond(self, code, body, content_type="application/json; charset=utf-8", filename=None, extra_headers=None):
             if isinstance(body, (dict, list)):
                 body = json.dumps(body, ensure_ascii=False).encode("utf-8")
             elif isinstance(body, str):
@@ -291,9 +425,13 @@ def make_handler(store, integrations=None):
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Cross-Origin-Resource-Policy", "same-origin")
             for name, value in SECURITY_HEADERS.items(): self.send_header(name, value)
+            for name, value in (extra_headers or {}).items(): self.send_header(name, value)
             if code == 429: self.send_header('Retry-After', '60')
             self.end_headers()
             self.wfile.write(body)
+
+        def authenticated(self):
+            return not lan or bool(auth and auth.valid_cookie(self.headers.get('Cookie', '')))
 
         def local_request(self):
             try:
@@ -301,19 +439,24 @@ def make_handler(store, integrations=None):
                 path = urlsplit(self.path).path
             except ValueError:
                 self.respond(400, {'error':'请求地址不正确'}); return False
-            if not local_boundary(self.headers, self.server.server_port, self.command, path):
-                self.respond(403, {"error": "只接受当前本机知识库页面的请求"})
+            if not local_boundary(self.headers, self.server.server_port, self.command, path, lan=lan):
+                self.respond(403, {"error": "只接受本机或已授权的局域网页面请求"})
                 return False
             if self.command in {'POST','PUT'}:
-                values = self.headers.get_all('X-Study-Atlas-Token', [])
-                if len(values) != 1 or not re.fullmatch(r'[a-f0-9]{64}', values[0]) or not secrets.compare_digest(values[0], security_token):
-                    self.respond(403, {'error':'安全连接已更新，请刷新后重试','code':'security_token'}); return False
+                session_path = lan and path in {'/api/session', '/api/session/logout'}
+                if not session_path:
+                    values = self.headers.get_all('X-Study-Atlas-Token', [])
+                    if len(values) != 1 or not re.fullmatch(r'[a-f0-9]{64}', values[0]) or not secrets.compare_digest(values[0], security_token):
+                        self.respond(403, {'error':'安全连接已更新，请刷新后重试','code':'security_token'}); return False
                 costly = self.command == 'POST' and path not in {'/api/integrations/ai','/api/youtube/client','/api/youtube/disconnect'}
                 if not limiter.allow('ai' if costly else 'write', 30 if costly else 180):
                     self.respond(429, {'error':'请求较频繁，请稍后重试'}); return False
             if path == '/api/export' and not limiter.allow('export', 6):
                 self.respond(429, {'error':'导出较频繁，请稍后再试'}); return False
             return True
+
+        def login_page(self):
+            return self.respond(200, (ROOT / 'login.html').read_bytes(), 'text/html; charset=utf-8')
 
         def read_json_body(self):
             lengths = self.headers.get_all('Content-Length', [])
@@ -327,12 +470,31 @@ def make_handler(store, integrations=None):
             if not self.local_request():
                 return
             path = urlsplit(self.path).path
-            if path == "/api/health":
+            if lan and not self.authenticated():
+                if path == '/api/session':
+                    self.respond(200, {'authenticated': False, 'lan': True})
+                elif path in {'/login', '/login.html'}:
+                    self.login_page()
+                elif path == '/login.js':
+                    self.respond(200, (ROOT / 'login.js').read_bytes(), 'text/javascript; charset=utf-8')
+                elif path == '/':
+                    self.login_page()
+                elif path == '/favicon.svg':
+                    self.respond(200, (ROOT / 'favicon.svg').read_bytes(), 'image/svg+xml')
+                else:
+                    self.respond(401, {'error': '请先在局域网登录页输入登录码'})
+                return
+            if lan and path in {'/login', '/login.html'}:
+                self.respond(302, b'', extra_headers={'Location': '/'})
+                return
+            if path == '/api/session':
+                self.respond(200, {'authenticated': True, 'lan': lan})
+            elif path == "/api/health":
                 self.respond(200, {"app": "study-atlas", "ok": True})
             elif path == '/api/security':
                 self.respond(200, {'token':security_token})
             elif path == "/api/integrations/status":
-                self.respond(200, dict(integrations.status(), security={'mode':'local','requestToken':True,'originChecks':True,'contentPolicy':True,'rateLimits':True}))
+                self.respond(200, dict(integrations.status(), security={'mode':'lan' if lan else 'local','login':lan,'requestToken':True,'originChecks':True,'contentPolicy':True,'rateLimits':True}))
             elif path == '/api/tasks':
                 from tasks import task_snapshot
                 self.respond(200, task_snapshot(importer))
@@ -366,7 +528,14 @@ def make_handler(store, integrations=None):
                 try:
                     kind = query.get("format", ["pdf"])[0]
                     result = export_notes(store.read(), query.get("videoId", [""])[0], kind, query.get('language', ['zh-CN'])[0])
-                    self.respond(200, result, "application/zip" if kind == "freeform" else "application/pdf", "无边记学习素材.zip" if kind == "freeform" else "AI学习笔记.pdf")
+                    if kind in {'freeform', 'handout-freeform'}:
+                        filename = '完整视频讲义_无边记素材.zip' if kind == 'handout-freeform' else '无边记学习素材.zip'
+                        self.respond(200, result, "application/zip", filename)
+                    elif kind in {'pdf', 'handout'}:
+                        filename = '完整视频讲义.pdf' if kind == 'handout' else 'AI学习笔记.pdf'
+                        self.respond(200, result, "application/pdf", filename)
+                    else:
+                        raise IntegrationError('导出格式不支持')
                 except IntegrationError as exc:
                     self.respond(400, {"error": str(exc)})
             elif path.startswith('/api/media/'):
@@ -402,6 +571,7 @@ def make_handler(store, integrations=None):
                           "/cornell.js": ("cornell.js", "text/javascript; charset=utf-8"),
                           "/translations.js": ("translations.js", "text/javascript; charset=utf-8"),
                           "/video-media.js": ("video-media.js", "text/javascript; charset=utf-8"),
+                          "/login.js": ("login.js", "text/javascript; charset=utf-8"),
                           "/favicon.svg": ("favicon.svg", "image/svg+xml")}
                 if path not in assets:
                     self.respond(404, {"error": "页面不存在"})
@@ -415,16 +585,36 @@ def make_handler(store, integrations=None):
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 self.respond(415, {"error": "只接受 JSON 数据"})
                 return
+            path = urlsplit(self.path).path
+            if lan and not self.authenticated() and path not in {'/api/session', '/api/session/logout'}:
+                self.respond(401, {'error': '登录已过期，请回到局域网登录页重新登录'})
+                return
             try:
                 data = self.read_json_body()
                 require(isinstance(data, dict), "请求必须是 JSON 对象")
-                path = urlsplit(self.path).path
-                if path == "/api/import":
+                if path == '/api/session':
+                    if not lan:
+                        self.respond(404, {'error': '当前是本机模式，不需要登录'})
+                    elif not limiter.allow('login', 6):
+                        self.respond(429, {'error': '登录尝试过多，请稍后再试'})
+                    elif not auth.verify_code(data.get('code')):
+                        self.respond(401, {'error': '登录码不正确'})
+                    else:
+                        self.respond(200, {'authenticated': True}, extra_headers={'Set-Cookie': auth.cookie_header()})
+                    return
+                elif path == '/api/session/logout':
+                    if lan and auth:
+                        auth.rotate_secret()
+                    self.respond(200, {'authenticated': False}, extra_headers={'Set-Cookie': LanAuth.clear_cookie_header()})
+                    return
+                elif path == "/api/import":
                     result = importer.submit(string(data.get("url"), "视频链接", 3000), data.get("retry") is True, data.get("detailed", True) is not False)
                 elif path == '/api/tasks/resume':
                     result = importer.resume(string(data.get('videoId'), '视频编号', 100))
                 elif path == '/api/material/course':
                     result = importer.submit_material(data)
+                elif path == '/api/papers/lookup':
+                    result = lookup_paper(string(data.get('query'), 'DOI 或 arXiv 编号', 3000))
                 elif path == '/api/integrations/compatible/models':
                     result = integrations.compatible_models(data.get('compatible'))
                 elif path == "/api/knowledge/build":
@@ -502,6 +692,9 @@ def make_handler(store, integrations=None):
         def do_PUT(self):
             if not self.local_request():
                 return
+            if lan and not self.authenticated():
+                self.respond(401, {'error': '登录已过期，请回到局域网登录页重新登录'})
+                return
             if urlsplit(self.path).path != "/api/library":
                 self.respond(404, {"error": "接口不存在"})
                 return
@@ -538,23 +731,63 @@ def initialize_local_library(root):
     return path
 
 
+def lan_ipv4_addresses():
+    candidates = set()
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            candidates.add(info[4][0])
+    except OSError:
+        pass
+    try:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            probe.connect(('192.168.1.1', 80))
+            candidates.add(probe.getsockname()[0])
+        finally:
+            probe.close()
+    except OSError:
+        pass
+    result = []
+    private_networks = [ipaddress.ip_network(net) for net in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '100.64.0.0/10')]
+    for value in candidates:
+        try:
+            address = ipaddress.ip_address(value)
+        except ValueError:
+            continue
+        if isinstance(address, ipaddress.IPv4Address) and any(address in network for network in private_networks):
+            result.append(value)
+    return sorted(set(result))
+
+
 def main():
     parser = argparse.ArgumentParser(description="学习图谱 · 本地视频知识库")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--data", type=Path, default=ROOT / "data" / "library.json")
     parser.add_argument("--open", action="store_true", help="启动后打开浏览器")
+    parser.add_argument("--lan", action="store_true", help="允许同一局域网设备通过登录码访问；绑定 0.0.0.0")
     args = parser.parse_args()
     if args.data == ROOT / "data" / "library.json":
         initialize_local_library(ROOT)
     store = LibraryStore(args.data)
+    auth = LanAuth(ROOT) if args.lan else None
+    host = '0.0.0.0' if args.lan else '127.0.0.1'
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(store, Integrations(ROOT)))
+        server = ThreadingHTTPServer((host, args.port), make_handler(store, Integrations(ROOT), lan=args.lan, auth=auth))
     except OSError as exc:
         if exc.errno == errno.EADDRINUSE:
             parser.exit(1, "这个端口已被占用。若知识库已经打开，直接使用原页面；也可添加 --port 8766。\n")
         parser.exit(1, "无法启动本机服务：" + str(exc) + "\n")
     url = "http://127.0.0.1:" + str(server.server_port)
     print("学习图谱已启动：" + url, flush=True)
+    if args.lan:
+        print("局域网模式：仅接受私网 / .local 主机，必须先输入登录码。", flush=True)
+        print("登录码文件：" + str(auth.code_file), flush=True)
+        for address in lan_ipv4_addresses():
+            print("iPad / 其他设备（IP）：" + "http://" + address + ":" + str(server.server_port) + "/", flush=True)
+        bonjour = socket.gethostname().rstrip('.').lower()
+        if bonjour.endswith('.local'):
+            print("iPad / 其他设备（Bonjour，推荐）：http://" + bonjour + ":" + str(server.server_port) + "/", flush=True)
+        print("如果 macOS 防火墙询问，请只在信任的专用网络允许；不要做公网端口转发。", flush=True)
     print("资料保存在：" + str(store.path), flush=True)
     print("保持此窗口运行；按 Control+C 停止。", flush=True)
     if args.open:

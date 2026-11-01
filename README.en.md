@@ -25,7 +25,7 @@ Download the source ZIP and extract it into your own user folder. Python **3.9+*
 - macOS / Linux: run `sh start.sh` in the project folder.
 - All platforms: `python server.py --open` with the appropriate Python executable.
 
-Open `http://127.0.0.1:8765`. Keep the terminal running. Use `--port 8766` if needed. The app binds to loopback only; it is intended for each person to install on their own computer.
+Open `http://127.0.0.1:8765`. Keep the terminal running. Use `--port 8766` if needed. By default the app binds to loopback only. To use an iPad/phone on the same trusted Wi-Fi, start with `sh start.sh --lan` (or `start.bat --lan`), then open the private IP printed in the terminal and enter the code from `.local/lan-code.txt`. LAN mode is opt-in and requires a session cookie; it is not public hosting. See [LAN and iPad access](docs/局域网与iPad访问.md).
 
 Open **首次使用 / 环境自检** in the sidebar for a read-only setup check. You can import TXT, Markdown or caption files before connecting AI. Plain text and Markdown preserve code indentation and line breaks. PDF / Word files need text extraction first.
 
@@ -39,13 +39,17 @@ Local endpoints are restricted to loopback; cloud endpoints use fixed official a
 
 PDF / Apple Freeform exports need `requirements.txt` and a Chinese font. Video extraction needs yt-dlp and may need Node.js. Local multilingual transcription needs Python 3.10+ and `tools/setup_transcription.py`; installation downloads model weights. These dependencies are optional for text-only use.
 
+For one course at a time, the **full video handout** adds a cover, chapter index, clickable timecodes and the complete saved transcript to the PDF and per-page PNGs. Its ZIP also includes a Markdown handout for Freeform, GoodNotes, Obsidian or Notion. The default AI-note export still excludes the raw transcript.
+
+The **paper knowledge base** resolves public DOI / arXiv metadata into a local reading list, tracks screening and reading stages, stores structured appraisal and page-level evidence, builds a review matrix from included papers, and exports BibTeX, RIS, Markdown and CSV. Metadata lookup happens only when requested and sends no notes or credentials.
+
 ## Privacy and portability
 
 Personal data stays in `data/library.json`; credentials, caches and models stay in `.local/` or ignored virtual environments. They are excluded from the public source package. Selected learning content is sent to the AI provider you configure; local storage does not mean cloud inference never receives it.
 
 Export a complete JSON backup before upgrading or changing computers. Import it into a fresh installation; duplicate sources retain the existing version. Credentials and cached video frames are not included. Reconfigure connections on the new machine.
 
-This is a single-user local app. Shared public hosting requires a separate design for authentication, HTTPS and data isolation.
+This is a single-user app. LAN mode shares the same local library with trusted devices after login, but it is not multi-user hosting or online sync. LAN HTTP is not encrypted; use a trusted network or a private Tailscale network. Public hosting requires a separate design for authentication, HTTPS, permissions and data isolation.
 
 ## Development
 

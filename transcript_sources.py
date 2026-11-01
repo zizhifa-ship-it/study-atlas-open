@@ -43,33 +43,172 @@ def canonical_video(raw):
         raise IntegrationError('自动获取资料目前支持公开 YouTube 视频，其他来源可导入本地转录文件')
 
 
-def parse_transcript(content, extension='txt'):
-    if not isinstance(content, str) or len(content) > 4 * 1024 * 1024:
-        raise IntegrationError('字幕文件为空或过大，请分章节导入')
-    if extension.lower().lstrip('.') in {'json3', 'json'}:
-        try:
-            data = json.loads(content)
-            raw = [x.get('content', '') for x in data['body'] if isinstance(x, dict)] if isinstance(data.get('body'), list) else [s.get('utf8', '') for e in data.get('events', []) for s in e.get('segs', [])]
-            content = '\n'.join(raw)
-        except (ValueError, AttributeError, TypeError):
-            raise IntegrationError('字幕 JSON 格式不正确')
-    lines = []
-    for raw in content.lstrip('\ufeff').splitlines():
-        line = re.sub(r'<[^>]+>', '', html.unescape(raw)).strip()
-        if not line or '-->' in line or line.isdigit() or line.startswith(('WEBVTT', 'Kind:', 'Language:', 'NOTE', 'STYLE', 'REGION')):
+captions_time = re.compile(r'(?:(\d{1,3}):)?(\d{1,3}):(\d{2})[.,](\d{1,3})')
+
+
+def _caption_text(value):
+    return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', html.unescape(str(value or '')))).strip()
+
+
+def _caption_seconds(value):
+    match = captions_time.search(str(value or ''))
+    if not match:
+        return None
+    hours, minutes, seconds, millis = match.groups()
+    return int(hours or 0) * 3600 + int(minutes) * 60 + int(seconds) + int(millis.ljust(3, '0')) / 1000
+
+
+def _merge_parts(parts):
+    merged = []
+    for raw in parts:
+        text = _caption_text(raw)
+        if not text:
             continue
-        if re.match(r'^\d{1,2}:\d\d(?::\d\d)?[.,]\d{3}', line):
+        if merged and text == merged[-1]:
             continue
-        if lines and line == lines[-1]:
-            continue
-        if lines and line.startswith(lines[-1] + ' '):
-            lines[-1] = line
+        if merged and text.startswith(merged[-1] + ' '):
+            merged[-1] = text
         else:
-            lines.append(line)
+            merged.append(text)
+    return ' '.join(merged)
+
+
+def _add_caption(lines, times, text, start=None):
+    text = _caption_text(text)
+    if not text:
+        return
+    if lines and text == lines[-1]:
+        return
+    if lines and text.startswith(lines[-1] + ' '):
+        lines[-1] = text
+        return
+    lines.append(text)
+    if start is not None:
+        try:
+            times.append(max(0, int(round(float(start)))))
+        except (TypeError, ValueError):
+            pass
+
+
+def _finish_captions(lines, times):
     text = '\n'.join(lines).strip()
     if not 20 <= len(text) <= MAX_TEXT:
         raise IntegrationError('转录需要 20 至 200000 个字符，请检查内容或按章节导入')
-    return text
+    return text, times if len(times) == len(lines) else []
+
+
+def parse_timed_transcript(content, extension='txt'):
+    """Return transcript lines plus one integer start-second per line when available."""
+    if not isinstance(content, str) or len(content) > 4 * 1024 * 1024:
+        raise IntegrationError('字幕文件为空或过大，请分章节导入')
+    ext = extension.lower().lstrip('.')
+    content = content.lstrip('\ufeff').replace('\r\n', '\n').replace('\r', '\n')
+    lines, times = [], []
+    if ext in {'json3', 'json'}:
+        try:
+            data = json.loads(content)
+        except (ValueError, TypeError):
+            raise IntegrationError('字幕 JSON 格式不正确')
+        if isinstance(data, dict) and isinstance(data.get('events'), list):
+            for event in data['events']:
+                if not isinstance(event, dict):
+                    continue
+                text = ''.join(segment.get('utf8', '') for segment in event.get('segs', []) if isinstance(segment, dict))
+                start = event.get('tStartMs')
+                _add_caption(lines, times, text, (start / 1000) if isinstance(start, (int, float)) else None)
+            return _finish_captions(lines, times)
+        if isinstance(data, dict) and isinstance(data.get('body'), list):
+            for item in data['body']:
+                if isinstance(item, dict):
+                    start = item.get('from')
+                    _add_caption(lines, times, item.get('content', ''), start)
+            return _finish_captions(lines, times)
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    start = item.get('start', item.get('from'))
+                    _add_caption(lines, times, item.get('text', item.get('content', '')), start)
+            return _finish_captions(lines, times)
+        raise IntegrationError('字幕 JSON 格式不正确')
+    if ext in {'vtt', 'srt'}:
+        for block in re.split(r'\n\s*\n', content):
+            block_lines = [line for line in block.splitlines() if line.strip()]
+            timing = next((i for i, line in enumerate(block_lines) if '-->' in line), None)
+            if timing is None:
+                continue
+            start = _caption_seconds(block_lines[timing].split('-->', 1)[0])
+            if start is None:
+                continue
+            _add_caption(lines, times, _merge_parts(block_lines[timing + 1:]), start)
+        if lines:
+            return _finish_captions(lines, times)
+    for raw in content.splitlines():
+        line = _caption_text(raw)
+        if not line or '-->' in line or line.isdigit() or line.startswith(('WEBVTT', 'Kind:', 'Language:', 'NOTE', 'STYLE', 'REGION')):
+            continue
+        if re.match(r'^\d{1,3}:\d{2}(?::\d{2})?[.,]\d{3}', line):
+            continue
+        _add_caption(lines, times, line)
+    return _finish_captions(lines, times)
+
+
+def parse_transcript(content, extension='txt'):
+    return parse_timed_transcript(content, extension)[0]
+
+
+def normalize_chapters(value, duration=0):
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        title = _caption_text(item.get('title', ''))[:200]
+        try:
+            start = int(round(float(item.get('start_time', item.get('start', -1)))))
+        except (TypeError, ValueError):
+            continue
+        if not title or start < 0 or (duration and start > float(duration)):
+            continue
+        result.append({'start': start, 'title': title})
+    result.sort(key=lambda item: item['start'])
+    unique = {}
+    for item in result:
+        unique.setdefault(item['start'], item)
+    return list(unique.values())[:50]
+
+
+def timeline_from_segments(data):
+    """Old caption caches stored text segments; convert them only when text still matches."""
+    segments = data.get('segments') if isinstance(data, dict) else None
+    if not isinstance(segments, list):
+        return []
+    lines, times = [], []
+    for segment in segments:
+        if isinstance(segment, dict):
+            _add_caption(lines, times, segment.get('text', ''), segment.get('start', 0))
+    if '\n'.join(lines).strip() != str(data.get('transcript', '')).strip():
+        return []
+    return times if len(times) == len(lines) else []
+
+
+def cached_timing(root, url, transcript):
+    """Read private local caption timing for export; never fetch or call a model."""
+    try:
+        vid, _ = canonical_video(url)
+    except IntegrationError:
+        return [], []
+    try:
+        data = json.loads((Path(root) / '.local/transcripts' / (vid + '.json')).read_text())
+    except (OSError, ValueError):
+        return [], []
+    if not isinstance(data, dict) or data.get('transcript', '').strip() != str(transcript or '').strip():
+        return [], []
+    timeline = data.get('timeline') if isinstance(data.get('timeline'), list) else timeline_from_segments(data)
+    timeline = [int(value) for value in timeline if isinstance(value, (int, float)) and value >= 0]
+    if len(timeline) != len(str(transcript).splitlines()):
+        timeline = []
+    return timeline, normalize_chapters(data.get('chapters'), data.get('durationSec', 0))
 
 
 def original_tracks(metadata):
@@ -180,6 +319,16 @@ def run_asr(root, url, progress):
                 if child.poll() is None:
                     child.terminate(); child.wait(timeout=10)
         data['transcript'] = parse_transcript(data.get('transcript', ''))
+        segments = data.get('segments')
+        if isinstance(segments, list):
+            lines, times = [], []
+            for segment in segments:
+                if isinstance(segment, dict):
+                    _add_caption(lines, times, segment.get('text', ''), segment.get('start', 0))
+            if lines and len(times) == len(lines):
+                data['transcript'] = '\n'.join(lines)
+                data['timeline'] = times
+            data.pop('segments', None)
         data.update(source='本机语音转录', kind='asr', partial=False, model=config.get('model', 'base'))
         return data
 
@@ -193,6 +342,10 @@ def acquire_transcript(root, url, progress=None, allow_asr=True, force=False):
     if target.exists() and not force:
         try:
             saved = json.loads(target.read_text()); parse_transcript(saved['transcript'])
+            if not isinstance(saved.get('timeline'), list):
+                timeline = timeline_from_segments(saved)
+                if timeline:
+                    saved['timeline'] = timeline
             return dict(saved, cached=True)
         except (ValueError, KeyError, OSError):
             pass
@@ -203,6 +356,7 @@ def acquire_transcript(root, url, progress=None, allow_asr=True, force=False):
         metadata = json.loads(result.stdout) if result.stdout.strip() else {}
     except (OSError, ValueError, subprocess.TimeoutExpired):
         metadata = {}
+    chapters = normalize_chapters(metadata.get('chapters'), metadata.get('duration', 0))
     tracks = original_tracks(metadata)
     data = None
     # 每条语言只选一种格式，最多尝试两个原语言轨；429 后停止字幕请求。
@@ -215,11 +369,11 @@ def acquire_transcript(root, url, progress=None, allow_asr=True, force=False):
             request = Request(track['url'], headers={'User-Agent': 'Mozilla/5.0', 'Referer': url})
             with urlopen(request, timeout=30) as response:
                 raw = response.read(4 * 1024 * 1024 + 1).decode('utf-8-sig')
-            transcript = parse_transcript(raw, track['ext'])
+            transcript, timeline = parse_timed_transcript(raw, track['ext'])
             data = {'transcript': transcript, 'language': track['language'], 'source': 'YouTube 原语言字幕',
                     'kind': 'captions', 'partial': False, 'languageFile': track['language'] + '.' + track['ext'], 'durationSec': metadata.get('duration', 0)}
-            if track['ext']=='json3':
-                parsed=json.loads(raw);data['segments']=[{'start':e.get('tStartMs',0)/1000,'end':(e.get('tStartMs',0)+e.get('dDurationMs',0))/1000,'text':''.join(s.get('utf8','') for s in e.get('segs',[]))} for e in parsed.get('events',[]) if e.get('segs')]
+            if timeline:
+                data['timeline'] = timeline
             break
         except HTTPError as exc:
             if exc.code == 429:
@@ -230,6 +384,13 @@ def acquire_transcript(root, url, progress=None, allow_asr=True, force=False):
         if not allow_asr:
             raise IntegrationError('没有取得原语言字幕；可启用本机转录或导入已有转录，不需要 YouTube 中文翻译')
         data = run_asr(root, url, progress)
+    if chapters and not data.get('chapters'):
+        data['chapters'] = chapters
+    if not isinstance(data.get('timeline'), list):
+        timeline = timeline_from_segments(data)
+        if timeline:
+            data['timeline'] = timeline
+    data.pop('segments', None)
     data.update(createdAt=datetime.now(timezone.utc).isoformat(), cached=False)
     fd, temp = tempfile.mkstemp(dir=cache, prefix='.transcript-')
     try:

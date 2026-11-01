@@ -40,6 +40,16 @@
   ],
   "videos": [],
   "insights": [],
+  "papers": [],
+  "research": {
+    "question": "",
+    "scope": "",
+    "searchStrategy": "",
+    "inclusion": "",
+    "exclusion": "",
+    "synthesis": "",
+    "updatedAt": ""
+  },
   "learning": {
     "attempts": []
   }

@@ -88,7 +88,7 @@ def subtitle_url(raw):
 
 
 def acquire_bilibili(root, url, progress=None, allow_asr=True, force=False):
-    from transcript_sources import parse_transcript, run_asr
+    from transcript_sources import parse_transcript, parse_timed_transcript, run_asr
     progress = progress or (lambda m: None); url = canonical_bilibili(url)
     parsed = urlsplit(url); identity = parsed.path.strip('/').split('/')[-1]; page = int(parse_qs(parsed.query).get('p', ['1'])[0])
     cache = Path(root) / '.local/transcripts'; cache.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -108,9 +108,11 @@ def acquire_bilibili(root, url, progress=None, allow_asr=True, force=False):
         for track in tracks[:2]:
             try:
                 body = get_json(subtitle_url(track['subtitle_url']))
-                transcript = parse_transcript(json.dumps(body, ensure_ascii=False), 'json')
+                transcript, timeline = parse_timed_transcript(json.dumps(body, ensure_ascii=False), 'json')
                 data = {'transcript': transcript, 'language': str(track.get('lan') or ''), 'source': '哔哩哔哩字幕 · P%d' % page,
-                        'kind': 'captions', 'segments': [{'start': x.get('from', 0), 'end': x.get('to', 0), 'text': x.get('content', '')} for x in body.get('body', []) if isinstance(x, dict)]}
+                        'kind': 'captions'}
+                if timeline:
+                    data['timeline'] = timeline
                 break
             except IntegrationError: continue
     except IntegrationError: pass
