@@ -1,0 +1,53 @@
+// 空白安装 → 自检 → 无密钥导入课堂资料 → 独立本机模型 → 知识模块 → 重载。
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+import {readFile} from 'node:fs/promises';
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const root=fileURLToPath(new URL('../',import.meta.url));
+const server=spawn(process.env.PYTHON_EXECUTABLE || 'python3',['tests/community_fixture.py'],{cwd:root,stdio:['ignore','pipe','pipe']});
+server.stderr.on('data',x=>process.stderr.write(x));
+const base=await new Promise((resolve,reject)=>{let text='';const timer=setTimeout(()=>reject(Error('临时服务未启动')),10000);server.stdout.on('data',x=>{text+=x;const m=text.match(/TEST_URL=(http:\/\/127\.0\.0\.1:\d+)/);if(m){clearTimeout(timer);resolve(m[1]);}});server.on('exit',code=>{clearTimeout(timer);reject(Error('临时服务退出 '+code));});});
+let browser;
+try {
+ browser=await chromium.launch({headless:true,...(process.env.STUDY_ATLAS_TEST_BROWSER?{executablePath:process.env.STUDY_ATLAS_TEST_BROWSER}:{})});
+ const page=await browser.newPage({viewport:{width:1365,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(base);await page.getByRole('button',{name:'首次使用引导',exact:true}).click();
+ await page.getByRole('heading',{name:'首次使用与环境自检',exact:true}).waitFor();
+ await page.getByText('基础功能已可使用，不需要模型密钥。',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'导入文字资料',exact:true}).click();
+ const source='网络使用 IP 进行跨网寻址，DHCP 自动分配 IP 地址。TCP 会确认与重传，UDP 不提供可靠性保证。\n\n```c\n#include <stdio.h>\n  printf("hello");\n```\n';
+ await page.locator('input[name=materialFile]').setInputFiles({name:'网络课堂.md',mimeType:'text/markdown',buffer:Buffer.from(source)});
+ await page.waitForFunction(()=>document.querySelector('textarea[name=content]')?.value.includes('#include'));
+ assert(!(await page.locator('input[name=generate]').isChecked()));
+ await page.getByRole('button',{name:'保存课堂资料',exact:true}).click();
+ await page.getByRole('heading',{name:'网络课堂',exact:true}).waitFor();
+ assert.equal(await page.getByRole('link',{name:'打开视频 ↗',exact:true}).count(),0);
+ await page.getByRole('button',{name:'查看原始资料',exact:true}).click();
+ await page.getByText('字幕与学习资料（通常由网站自动读取）',{exact:true}).click();
+ assert.equal(await page.locator('[data-transcript-form] textarea').inputValue(),source);
+ const courseURL=await page.getByRole('button',{name:'打开笔记',exact:true}).getAttribute('data-id');
+ await page.getByRole('button',{name:'AI / Harness 设置',exact:true}).click();
+ await page.getByLabel('整理时使用',{exact:true}).selectOption('compatible');
+ await page.getByLabel('兼容接口服务',{exact:true}).selectOption('ollama');
+ await page.getByRole('button',{name:'读取该服务的模型列表',exact:true}).click();
+ await page.getByText('已读取 1 个模型，可在模型 ID 输入框中选择',{exact:true}).waitFor();
+ await page.getByLabel('兼容接口模型 ID',{exact:true}).fill('local-model');
+ await page.getByRole('button',{name:'保存 AI 设置',exact:true}).click();await page.getByText('AI 设置已保存',{exact:true}).waitFor();
+ await page.goto(base+'/#video/'+courseURL);await page.getByRole('button',{name:'让 AI 构建知识模块',exact:true}).click();
+ await page.locator('.knowledge-panel').waitFor();assert.equal(await page.locator('.knowledge-module').count(),2);
+ await page.reload();await page.locator('.knowledge-panel').waitFor();assert.equal(await page.locator('.knowledge-module').count(),2);
+ await page.goto(base+'/#setup');await page.getByText('已保存 AI 配置，实际连通性与额度以服务为准。',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'导出与备份',exact:true}).click();
+ const download=page.waitForEvent('download');await page.getByRole('button',{name:'导出 JSON',exact:true}).click();
+ const saved=await download,backup=await readFile(await saved.path(),'utf8'),backupData=JSON.parse(backup);
+ assert.equal(backupData.videos.length,1);assert.equal(backupData.videos[0].transcript,source);
+ assert(!backup.includes('compatibleProfiles'));assert(!backup.includes('apiKey'));
+ await page.getByRole('button',{name:'完成',exact:true}).click();
+ await page.locator('#import-file').setInputFiles({name:'backup.json',mimeType:'application/json',buffer:Buffer.from(backup)});
+ await page.getByRole('button',{name:'确认',exact:true}).click();await page.getByText('备份已合并',{exact:true}).waitFor();
+ assert.equal((await (await page.request.get(base+'/api/library')).json()).videos.length,1);
+
+ await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+ assert.deepEqual(errors,[]);console.log('新用户流程通过：空白安装 → 自检 → 无密钥 Markdown 导入 → 代码保留 → 独立本机模型 → 生成知识模块 → 刷新 → JSON 迁移去重 → 手机布局。');
+} finally {await browser?.close();server.kill('SIGINT');}
