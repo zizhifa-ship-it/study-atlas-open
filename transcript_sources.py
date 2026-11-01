@@ -1,10 +1,13 @@
+from security import private_fd_mode
 """原语言字幕优先，缓存优先；可选本机音轨转录，不请求 YouTube 翻译字幕。"""
 import html
+import importlib.util
 import json
 import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from datetime import datetime, timezone
@@ -96,12 +99,23 @@ def original_tracks(metadata):
     return sorted(result, key=lambda t: t['rank'])
 
 
+def ytdlp_prefix(root=None):
+    root = Path(root) if root else Path(__file__).resolve().parent
+    name = 'yt-dlp.exe' if os.name == 'nt' else 'yt-dlp'
+    folder = 'Scripts' if os.name == 'nt' else 'bin'
+    candidates = [shutil.which('yt-dlp'), Path(sys.executable).parent / name,
+                  root / '.venv' / folder / name, root / '.venv-asr' / folder / name,
+                  Path.home() / '.local/bin/yt-dlp']
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file(): return [str(candidate)]
+    if importlib.util.find_spec('yt_dlp'): return [sys.executable, '-m', 'yt_dlp']
+    raise IntegrationError('未安装 yt-dlp，可先导入本地字幕或转录文件')
+
+
 def ytdlp_command():
-    exe = shutil.which('yt-dlp') or str(Path.home() / '.local/bin/yt-dlp')
-    if not Path(exe).is_file():
-        raise IntegrationError('未安装 yt-dlp，可先导入本地字幕或转录文件')
+    prefix = ytdlp_prefix()
     node = shutil.which('node') or ('/usr/local/bin/node' if Path('/usr/local/bin/node').is_file() else '')
-    return [exe, '--ignore-config', '--no-playlist', '--no-warnings', '--no-progress', '--socket-timeout', '20',
+    return prefix + ['--ignore-config', '--no-playlist', '--no-warnings', '--no-progress', '--socket-timeout', '20',
             '--retries', '0', '--extractor-retries', '0', '--extractor-args', 'youtube:skip=translated_subs'] + (['--js-runtimes', 'node:' + node] if node else [])
 
 
@@ -219,7 +233,7 @@ def acquire_transcript(root, url, progress=None, allow_asr=True, force=False):
     data.update(createdAt=datetime.now(timezone.utc).isoformat(), cached=False)
     fd, temp = tempfile.mkstemp(dir=cache, prefix='.transcript-')
     try:
-        os.fchmod(fd, 0o600)
+        private_fd_mode(fd)
         with os.fdopen(fd, 'w') as out:
             json.dump(data, out, ensure_ascii=False)
         os.replace(temp, target)
