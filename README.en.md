@@ -4,7 +4,13 @@
 
 > **Noncommercial use is free. Commercial use of newly licensed material requires prior written permission from [zizhifa-ship-it](https://github.com/zizhifa-ship-it) and individually agreed fees.** [Policy and application](COMMERCIAL-LICENSE.md) · [Apply](https://github.com/zizhifa-ship-it/study-atlas-open/issues/new?template=commercial-license.yml). Previously MIT-licensed material retains its existing rights.
 
-A local-first learning library for public YouTube / Bilibili videos, classroom text and Markdown. Organize categories, sources and notes; create source-backed knowledge modules, Cornell notes, mind maps, translations and review questions. The interface is currently primarily Simplified Chinese.
+## Overview / 简介
+
+A local-first AI learning library designed for beginners to explore and customize. Organize **categories → videos or class materials → notes**: paste public YouTube / Bilibili links or import text, Markdown and captions, connect your preferred model, and create source-backed knowledge modules, Cornell notes, mind maps, translations and review questions. Export PDF / iPad Freeform materials and JSON backups. The interface is currently primarily Simplified Chinese.
+
+一个在自己电脑运行的 AI 学习知识库，适合初学者阅读和修改。按 **分类 → 视频或课堂资料 → 笔记** 整理内容，连接自己选择的模型，生成知识模块、康奈尔笔记、脑图、翻译和复习题，支持 PDF / iPad 无边记导出与 JSON 备份。详细中文说明见 [中文指南](README.md)。
+
+> **许可：**非商业免费；受新许可约束的内容，商业使用须先获得书面许可并按约付费。旧 MIT 内容保留原权利，详见 [许可政策与申请](COMMERCIAL-LICENSE.md)。
 
 ## Run locally
 
