@@ -51,7 +51,10 @@ export function knowledgePanel(video, tab='details', compact=false, markdown) {
       return `<article class="knowledge-module" id="module-${esc(m.id)}"><h3><span>${String(i+1).padStart(2,'0')}</span>${esc(m.title)}</h3><p class="module-objective"><strong>学习目标：</strong>${esc(m.objective)}</p>${m.prerequisites.length?'<p class="module-prerequisites"><strong>前置知识：</strong>'+m.prerequisites.map(esc).join('、')+'</p>':''}${cornellSheet(m,body)}</article>`;
     }).join('');
   }
-  html+=`<div class="source-list"><a href="${esc(video.url)}" target="_blank" rel="noopener noreferrer">[S1] 原课程：${esc(video.title)} ↗</a></div></section>`;
+  const source=/^https?:\/\//i.test(video.url)
+    ? `<a href="${esc(video.url)}" target="_blank" rel="noopener noreferrer">[S1] 原课程：${esc(video.title)} ↗</a>`
+    : `<button class="link-button" data-action="navigate" data-view="quality" data-id="${esc(video.id)}">[S1] 查看原始课堂资料：${esc(video.title)}</button>`;
+  html+=`<div class="source-list">${source}</div></section>`;
   return html;
 }
 
