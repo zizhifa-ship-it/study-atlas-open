@@ -1,21 +1,71 @@
-MIT License
+Study Atlas Source-Available Noncommercial License 1.0
+Published: 2026-11-01
+Licensor for covered new material: zizhifa-ship-it
+https://github.com/zizhifa-ship-it
 
-Copyright (c) 2026 Study Atlas contributors
+0. Scope and preservation of existing rights
+This license applies only to original material first published with this
+license, and later original additions expressly released under it, to the
+extent the Licensor has the necessary rights (the "Covered Material").
+It does not revoke, replace, narrow or impose fees on any previously granted
+license. Code and documentation published under MIT through commit
+7bcb7e431bc6a7f1725cbab534906afbb7f7285e remain under MIT, including when
+retained in later versions. See LICENSE-MIT-LEGACY for the unchanged notice.
+The core functionality already existed in that MIT release. Nothing here
+converts that existing code into exclusively noncommercial code.
+Third-party and separately licensed material remains under its own terms.
+No ownership or authority over other contributors' rights is implied.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. Free noncommercial grant
+Subject to these terms, you may use, copy, study, modify and redistribute
+the Covered Material, in source or compiled form, without a fee, solely for
+Noncommercial Purposes. Preserve this license, attribution and applicable
+legacy and third-party notices, identify your modifications, and distribute
+the Covered Material and your adaptations under these same restrictions.
+You may not grant broader rights in the Covered Material than you receive.
+"Noncommercial Purposes" means purposes not primarily intended for or
+directed toward commercial advantage or monetary compensation. Personal
+noncommercial study, noncommercial research and free noncommercial teaching
+qualify. The status of an organization alone does not determine the purpose.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+2. Prior paid commercial permission required
+No commercial rights in the Covered Material are granted by this license.
+Commercial uses include sale, commercial product integration, paid hosting,
+SaaS, paid deployment, paid note-generation services, internal business
+operations, paid training, consulting and customer deliverables, whether or
+not the end user is directly charged. Before such use, request a separate
+license from zizhifa-ship-it through the application route described in
+COMMERCIAL-LICENSE.md. You must obtain an express written commercial license
+and satisfy its agreed payment and effective-date conditions before use.
+Pricing, scope, duration, deployment, redistribution and support are agreed
+individually. A request, quote, silence, star, fork, donation or payment alone
+does not grant permission. The Licensor may decline a new application;
+an issued commercial license is governed by its own written terms.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+3. User content and other rights
+This license governs software and associated documentation, not ownership
+of a user's lawful original inputs, notes or outputs. Running a commercial
+service using Covered Material is still subject to section 2. No rights in
+third-party videos, captions, models, fonts, services or trademarks are
+granted. Statutory rights and limitations are unaffected. All rights in the
+Covered Material not expressly granted are reserved.
+
+4. No warranty; limitation of liability
+THE COVERED MATERIAL IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NONINFRINGEMENT. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE
+LAW, THE LICENSOR AND CONTRIBUTORS ARE NOT LIABLE FOR CLAIMS, DAMAGES OR
+OTHER LIABILITY ARISING FROM THE COVERED MATERIAL OR ITS USE.
+
+5. Status and language
+This is a source-available license with a commercial-use restriction, not
+an OSI-approved open-source license. COMMERCIAL-LICENSE.md explains the
+application process in Chinese and English; this LICENSE controls the free
+grant. A separately executed commercial license controls its stated scope.
+
+中文要点（完整免费许可范围以上述英文条款为准）：
+非商业用途可免费使用、修改和分享，并保留声明。受本许可约束的新增内容，
+商业用途须向 zizhifa-ship-it 事先申请，取得书面许可并满足约定的付款及生效条件。
+价格和范围逐项约定；提交申请、报价、赞助、单独付款或未收到回复均不构成许可。
+已按 MIT 发布的旧代码与文档继续适用原 MIT 许可，不能通过本次修改追溯收费。
+详情与申请入口见 COMMERCIAL-LICENSE.md；未公开私人联系方式。
