@@ -2,6 +2,11 @@
 
 [简体中文](README.md)
 
+[下载测试版 / Download beta](https://github.com/zizhifa-ship-it/study-atlas-open/releases/tag/v0.1.0-beta.1) · [无密钥试用 / Try the sample](docs/试用与反馈.md) · [试用反馈 / Feedback](https://github.com/zizhifa-ship-it/study-atlas-open/issues/new?template=03-trial-feedback.yml) · [报告问题 / Report a bug](https://github.com/zizhifa-ship-it/study-atlas-open/issues/new?template=01-bug-report.yml)
+
+![学习图谱功能示意 / Study Atlas feature illustration](docs/images/study-atlas-overview.svg)
+
+
 > **Noncommercial use is free. Commercial use of newly licensed material requires prior written permission from [zizhifa-ship-it](https://github.com/zizhifa-ship-it) and individually agreed fees.** [Policy and application](COMMERCIAL-LICENSE.md) · [Apply](https://github.com/zizhifa-ship-it/study-atlas-open/issues/new?template=commercial-license.yml). Previously MIT-licensed material retains its existing rights.
 
 ## Overview / 简介
