@@ -44,7 +44,7 @@
 
 一次最多发送 14 万字符的资料；更长内容先按章节整理。结论需要结合原材料核对，资料不足时应保留疑问。
 
-AI 整理会将勾选的资料发送给当前模型服务。Harness 默认可能使用云端 DeepSeek，也可能由你配置成本地模型；处理位置由实际模型配置决定。开源时排除个人资料不代表云端 AI 从不处理它们。
+AI 整理会将勾选的资料发送给当前模型服务。Harness 默认可能使用云端 DeepSeek，也可能由你配置成本地模型；处理位置由实际模型配置决定。公开源码时排除个人资料不代表云端 AI 从不处理它们。
 
 ## 5. 可选：授权 YouTube 账号（粘贴链接无需此步骤）
 
@@ -80,9 +80,9 @@ AI 整理会将勾选的资料发送给当前模型服务。Harness 默认可能
 
 ## 6. GitHub 保存的是什么
 
-开源仓库只保存项目代码、文档、MIT 许可证和 `data/library.example.json` 空白示例。个人视频收藏、字幕、总结、笔记与经验归纳位于被 Git 忽略的 `data/library.json`；API Key、Harness 凭据、YouTube OAuth 客户端和 token 位于被忽略的 `.local/`。
+公开源码仓库只保存项目代码、文档、许可声明和 `data/library.example.json` 空白示例。个人视频收藏、字幕、总结、笔记与经验归纳位于被 Git 忽略的 `data/library.json`；API Key、Harness 凭据、YouTube OAuth 客户端和 token 位于被忽略的 `.local/`。
 
-导出 JSON 包含个人学习资料，不包含连接凭据，应该自行保管，不能把它当成开源示例上传。提交前使用 `git status --ignored` 和 `git diff --cached` 检查内容，也要检查提交作者邮箱是否符合自己的隐私要求。
+导出 JSON 包含个人学习资料，不包含连接凭据，应该自行保管，不能把它当成公开示例上传。提交前使用 `git status --ignored` 和 `git diff --cached` 检查内容，也要检查提交作者邮箱是否符合自己的隐私要求。
 
 GitHub 保存项目不等于网页已在线部署。本机服务需要终端运行，点“保存”也不会自动提交 GitHub。跨设备同步、在线登录和自动任务属于后续开发。
 
