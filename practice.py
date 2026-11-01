@@ -1,3 +1,4 @@
+from integrations import select_generator, selected_model
 """依据已保存模块进行自测、AI 批改和简单间隔复习；不推断未作答的掌握度。"""
 import hashlib
 import json
@@ -182,7 +183,7 @@ def grade_answer(store, integrations, request, clock=None):
                   '看过参考答案时仍如实批改，但不要声称这是独立掌握的证明。资料：\n' + compact_json({
                       "question": card["question"], "referenceAnswer": card["referenceAnswer"], "material": card["material"],
                       "studentAnswer": response, "referenceViewed": assisted}))
-        generator = integrations.deepseek_generate if integrations.read("ai").get("mode", "harness") == "deepseek" else integrations.harness_generate
+        generator = select_generator(integrations)
         result = generator(prompt)
         feedback = assess_response(result, card)
         with store.lock:
