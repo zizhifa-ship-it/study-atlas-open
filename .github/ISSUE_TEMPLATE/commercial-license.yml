@@ -1,0 +1,45 @@
+name: 商业许可申请 / Commercial license request
+description: 向维护者申请商业使用许可并获取单独报价 / Request permission and a quote.
+title: "[商业许可申请] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        非商业免费；商业用途按适用许可需事先书面批准并按约付费。请先阅读 [商业许可说明](https://github.com/zizhifa-ship-it/study-atlas-open/blob/main/COMMERCIAL-LICENSE.md)，特别是旧 MIT 版本的适用边界。
+        此 Issue 公开可见，只填写可公开的信息；不要填写私人联系方式、密钥、身份证、合同或客户数据。后续通过你的 GitHub 账号联系。申请或付款本身不代表授权。
+        This issue is public. Submit public information only. An application or payment alone does not grant permission. Previously MIT-licensed material retains its MIT rights.
+  - type: input
+    id: applicant
+    attributes:
+      label: 申请主体 / Applicant
+      description: 可公开的组织名称、项目名或 GitHub 用户名即可 / Public name or GitHub username.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 使用版本 / Version or commit
+      description: 填写具体提交、版本或链接 / Identify the exact source revision.
+    validations:
+      required: true
+  - type: textarea
+    id: purpose
+    attributes:
+      label: 商业用途 / Commercial use case
+      description: 描述产品或业务、收费方式，以及是否对客户提供服务 / Product, business model and customer-facing service.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 部署与许可范围 / Scope
+      description: 本地或托管部署、预计用户/部署数、期限、是否修改及再分发 / Hosting, user and deployment counts, term, modifications and redistribution.
+    validations:
+      required: true
+  - type: checkboxes
+    id: acknowledgement
+    attributes:
+      label: 确认 / Acknowledgement
+      options:
+        - label: 我已阅读许可说明，理解旧 MIT 内容的例外及新内容商业使用须先获得书面许可并按约付费；本申请不构成授权或购买承诺。 / I understand the legacy MIT exception and that restricted material needs a separate written commercial license; this request is not a license or a purchase commitment.
+          required: true
