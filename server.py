@@ -2,6 +2,9 @@
 """学习图谱：只依赖 Python 标准库的本地知识库服务。"""
 
 import argparse
+import sys
+if sys.version_info < (3, 9):
+    raise SystemExit('Study Atlas requires Python 3.9 or newer: https://www.python.org/downloads/')
 import copy
 import errno
 import json
@@ -25,6 +28,7 @@ from note_layout import clean_cornell
 from video_media import validate_thumbnail, validate_visuals, ASSET
 from note_translations import validate_translations, LANGUAGES
 from security import SECURITY_HEADERS, RateLimiter, local_boundary, strict_json
+from materials import is_material_url
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 4 * 1024 * 1024
@@ -45,10 +49,10 @@ def require(condition, message):
         raise ValidationError(message)
 
 
-def string(value, label, limit=500, empty=False):
+def string(value, label, limit=500, empty=False, preserve=False):
     require(isinstance(value, str), label + "必须是文字")
-    value = value.strip()
-    require(empty or bool(value), "请填写" + label)
+    if not preserve: value = value.strip()
+    require(empty or bool(value.strip()), "请填写" + label)
     require(len(value) <= limit, label + "太长了")
     return value
 
@@ -117,7 +121,7 @@ def validate_library(payload):
         url = string(video.get("url"), "视频链接", 3000)
         try:
             parsed = urlsplit(url)
-            require(parsed.scheme in {"https", "http"} and bool(parsed.hostname)
+            require(is_material_url(url) or parsed.scheme in {"https", "http"} and bool(parsed.hostname)
                     and not parsed.username and not parsed.password
                     and not any(ch.isspace() for ch in url), "请填写有效的 http 或 https 视频链接")
         except ValueError:
@@ -156,7 +160,7 @@ def validate_library(payload):
             "tags": list(dict.fromkeys(string(t, "标签", 60) for t in tags)),
             "status": status, "favorite": video.get("favorite", False),
             "summary": string(video.get("summary", ""), "知识总结", 30000, True),
-            "transcript": string(video.get("transcript", ""), "字幕或转录", 200000, True),
+            "transcript": string(video.get("transcript", ""), "字幕或转录", 200000, True, preserve=True),
             "automation": clean_automation(video.get("automation", {})),
             "knowledge": validate_knowledge(video.get("knowledge")),
             "notes": clean_notes,
@@ -192,7 +196,7 @@ def validate_library(payload):
             require(isinstance(source, dict), "来源格式不正确")
             url = string(source.get("url"), "来源链接", 3000)
             parsed = urlsplit(url)
-            require(parsed.scheme in {"http", "https"} and bool(parsed.hostname)
+            require(is_material_url(url) or parsed.scheme in {"http", "https"} and bool(parsed.hostname)
                     and not parsed.username and not parsed.password, "来源链接不正确")
             clean_sources.append({"source": string(source.get("source"), "来源编号", 20),
                                   "videoId": identifier(source.get("videoId")),
@@ -332,6 +336,9 @@ def make_handler(store, integrations=None):
             elif path == '/api/tasks':
                 from tasks import task_snapshot
                 self.respond(200, task_snapshot(importer))
+            elif path == '/api/setup/status':
+                from diagnostics import readiness
+                self.respond(200, readiness(getattr(integrations, 'root', ROOT), integrations))
             elif path == "/api/youtube/callback":
                 try:
                     integrations.youtube_callback(parse_qs(urlsplit(self.path).query))
@@ -416,6 +423,10 @@ def make_handler(store, integrations=None):
                     result = importer.submit(string(data.get("url"), "视频链接", 3000), data.get("retry") is True, data.get("detailed", True) is not False)
                 elif path == '/api/tasks/resume':
                     result = importer.resume(string(data.get('videoId'), '视频编号', 100))
+                elif path == '/api/material/course':
+                    result = importer.submit_material(data)
+                elif path == '/api/integrations/compatible/models':
+                    result = integrations.compatible_models(data.get('compatible'))
                 elif path == "/api/knowledge/build":
                     result = importer.submit_knowledge(string(data.get("videoId"), "视频编号", 100), data.get("reviewOnly") is True)
                 elif path == '/api/knowledge/format':
@@ -447,11 +458,11 @@ def make_handler(store, integrations=None):
                     require(target is not None, "视频不存在")
                     result = integrations.transcript(target["url"])
                 elif path == '/api/material/import':
-                    from transcript_sources import parse_transcript
+                    from materials import parse_material
                     vid = string(data.get('videoId'), '视频编号', 100)
                     filename = string(data.get('filename', 'transcript.txt'), '文件名', 200)
-                    raw = string(data.get('content'), '字幕或转录', 200000)
-                    transcript = parse_transcript(raw, Path(filename).suffix)
+                    raw = string(data.get('content'), '字幕或转录', 200000, preserve=True)
+                    _, _, transcript = parse_material({'title':'补充学习资料','filename':filename,'content':raw})
                     with store.lock:
                         latest = store.read(); target = next((v for v in latest['videos'] if v['id'] == vid), None)
                         require(target is not None, '视频不存在')
