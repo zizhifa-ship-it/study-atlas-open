@@ -15,6 +15,9 @@ def compact_json(value):
 
 def model_identity(engine):
     ai = engine.read('ai')
+    if ai.get('mode') == 'compatible':
+        provider = ai.get('compatibleProvider', 'ollama');profile = ai.get('compatibleProfiles', {}).get(provider, {})
+        return ['compatible', provider, profile.get('baseUrl'), profile.get('model')]
     if ai.get('mode', 'harness') == 'deepseek':
         return ['deepseek', ai.get('model', 'deepseek-flash')]
     harness = engine.read('harness')
