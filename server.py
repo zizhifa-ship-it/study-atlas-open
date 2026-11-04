@@ -36,6 +36,7 @@ from materials import is_material_url
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 4 * 1024 * 1024
+DOCUMENT_BODY_LIMIT = 64 * 1024 * 1024
 COLORS = {"green", "blue", "purple", "orange"}
 STATUSES = {"todo", "learning", "done"}
 PAPER_STAGES = {"candidate", "screening", "included", "excluded"}
@@ -485,7 +486,7 @@ def make_handler(store, integrations=None, lan=False, auth=None, access_policy=N
         def read_json_body(self):
             lengths = self.headers.get_all('Content-Length', [])
             require(len(lengths) == 1 and lengths[0].isdigit() and not self.headers.get('Transfer-Encoding'), '请求长度格式不正确')
-            limit = 12 * 1024 * 1024 if urlsplit(self.path).path in {'/api/material/pdf', '/api/material/document'} else MAX_BODY
+            limit = DOCUMENT_BODY_LIMIT if urlsplit(self.path).path in {'/api/material/pdf', '/api/material/document'} else MAX_BODY
             length = int(lengths[0]); require(0 < length <= limit, '请求内容为空或过大')
             raw = self.rfile.read(length)
             require(len(raw) == length, '请求内容没有完整传输')

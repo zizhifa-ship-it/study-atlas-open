@@ -12,9 +12,9 @@ from html.parser import HTMLParser
 from pathlib import PurePosixPath
 from xml.etree import ElementTree
 
-MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
-MAX_UNCOMPRESSED_BYTES = 24 * 1024 * 1024
-MAX_DOCX_XML_BYTES = 12 * 1024 * 1024
+MAX_DOCUMENT_BYTES = 32 * 1024 * 1024
+MAX_UNCOMPRESSED_BYTES = 128 * 1024 * 1024
+MAX_DOCX_XML_BYTES = 32 * 1024 * 1024
 TEXT_EXTENSIONS = {'.txt', '.md', '.markdown', '.srt', '.vtt', '.json', '.json3'}
 
 
@@ -155,13 +155,13 @@ def extract_document(data):
         raise IntegrationError('文件内容为空')
     max_encoded = 4 * ((MAX_DOCUMENT_BYTES + 2) // 3)
     if len(encoded) > max_encoded:
-        raise IntegrationError('文件最多 8 MB，请按章节拆分')
+        raise IntegrationError('文件最多 %d MB，请按章节拆分' % (MAX_DOCUMENT_BYTES // (1024 * 1024)))
     try:
         raw = base64.b64decode(encoded, validate=True)
     except (ValueError, binascii.Error):
         raise IntegrationError('文件上传编码不正确')
     if not raw or len(raw) > MAX_DOCUMENT_BYTES:
-        raise IntegrationError('文件最多 8 MB，请按章节拆分')
+        raise IntegrationError('文件最多 %d MB，请按章节拆分' % (MAX_DOCUMENT_BYTES // (1024 * 1024)))
 
     if suffix == '.pdf':
         from pdf_import import read_pdf_upload

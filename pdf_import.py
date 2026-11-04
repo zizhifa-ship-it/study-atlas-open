@@ -8,8 +8,8 @@ import sys
 import threading
 from pathlib import Path, PurePosixPath
 
-MAX_PDF_BYTES = 8 * 1024 * 1024
-MAX_PAGES = 300
+MAX_PDF_BYTES = 32 * 1024 * 1024
+MAX_PAGES = 1000
 MAX_TEXT = 800000
 IMPORT_LOCK = threading.Lock()
 
@@ -30,7 +30,7 @@ def read_pdf_upload(data):
             check = subprocess.run([str(executable), '-c', 'import pypdfium2'], capture_output=True, timeout=10)
             if check.returncode: continue
             result = subprocess.run([str(executable), str(root / 'pdf_import.py'), '--worker'],
-                                    input=json.dumps(data, ensure_ascii=False).encode(), capture_output=True, timeout=60)
+                                    input=json.dumps(data, ensure_ascii=False).encode(), capture_output=True, timeout=180)
             if result.returncode:
                 raise IntegrationError('PDF 读取未完成，请检查文件或按章节拆分')
             response = json.loads(result.stdout)
@@ -56,13 +56,13 @@ def extract_pdf(data):
     if not filename.lower().endswith('.pdf'):
         raise IntegrationError('请选择 PDF 文件')
     if not isinstance(encoded, str) or not encoded or len(encoded) > 4 * ((MAX_PDF_BYTES + 2) // 3):
-        raise IntegrationError('PDF 最多 8 MB，请按章节拆分')
+        raise IntegrationError('PDF 最多 %d MB，请按章节拆分' % (MAX_PDF_BYTES // (1024 * 1024)))
     try:
         raw = base64.b64decode(encoded, validate=True)
     except (ValueError, binascii.Error):
         raise IntegrationError('PDF 上传编码不正确')
     if len(raw) > MAX_PDF_BYTES or not raw.startswith(b'%PDF-'):
-        raise IntegrationError('文件不是有效 PDF，或超过 8 MB')
+        raise IntegrationError('文件不是有效 PDF，或超过 %d MB' % (MAX_PDF_BYTES // (1024 * 1024)))
     try:
         import pypdfium2 as pdfium
     except ImportError:
@@ -72,7 +72,7 @@ def extract_pdf(data):
         document = pdfium.PdfDocument(raw)
         count = len(document)
         if not 1 <= count <= MAX_PAGES:
-            raise IntegrationError('PDF 最多 300 页，请按章节拆分')
+            raise IntegrationError('PDF 最多 %d 页，请按章节拆分' % MAX_PAGES)
         parts, empty, size = [], [], 0
         for index in range(count):
             page = document[index]

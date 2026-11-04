@@ -55,7 +55,7 @@ class PDFTests(unittest.TestCase):
 
     def test_page_cap_and_mixed_empty_pages_are_explicit(self):
         with patch('pdf_import.MAX_PAGES', 1):
-            with self.assertRaisesRegex(IntegrationError, '300'): extract_pdf(pdf_data())
+            with self.assertRaisesRegex(IntegrationError, '页'): extract_pdf(pdf_data())
         from reportlab.pdfgen.canvas import Canvas
         buffer = io.BytesIO(); canvas = Canvas(buffer)
         canvas.drawString(50, 700, 'Sufficient real content about network routing and addressing.')

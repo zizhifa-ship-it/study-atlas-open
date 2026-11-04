@@ -410,7 +410,7 @@ async function materialModal() {
   showModal('导入 PDF、课堂文字与 Markdown','文件先在本机解析和预览，读取本身不消耗 AI token；只有勾选自动整理并保存后，文字才会发送给当前模型。',`<form>
     <label class="field"><span>课程标题</span><input name="title" required maxlength="500" placeholder="例如：C 语言第 2 讲 · 分支与循环"></label>
     <label class="field"><span>分类</span><select name="categoryId"><option value="">课堂资料（自动创建）</option>${categoryOptions('')}</select></label>
-    <label class="field"><span>从文件读取（可选）</span><input type="file" name="materialFile" accept=".pdf,.docx,.html,.htm,.txt,.md,.markdown,.srt,.vtt,.json,.json3"><small>PDF / DOCX / HTML 最多 8 MB；PDF 最多 300 页；文字文件最多 3.2 MB，正文最多 80 万字符。扫描件需先 OCR。</small></label>
+    <label class="field"><span>从文件读取（可选）</span><input type="file" name="materialFile" accept=".pdf,.docx,.html,.htm,.txt,.md,.markdown,.srt,.vtt,.json,.json3"><small>PDF / DOCX / HTML 最多 32 MB；PDF 最多 1000 页；文字文件最多 16 MB，正文最多 80 万字符。扫描件需先 OCR。</small></label>
     <input type="hidden" name="filename" value="课堂资料.txt"><p class="notice" id="material-file-status" role="status" hidden></p>
     <label class="field"><span>原始文字或 Markdown</span><textarea name="content" required minlength="20" maxlength="800000" rows="9" placeholder="粘贴课堂讲义、文章笔记或字幕。TXT / Markdown 中的代码与缩进会原样保存。"></textarea></label>
     <label class="source-choice"><input type="checkbox" name="generate"${setup.aiConfigured?' checked':''}><span>保存后由 AI 制作知识模块、脑图与复习问答<small>${setup.aiConfigured?'使用当前模型额度，进度在“整理任务”中查看。':'当前尚未配置 AI。可以先保存资料，之后选择模型再整理。'}</small></span></label>
