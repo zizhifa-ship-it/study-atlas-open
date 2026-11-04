@@ -1,6 +1,6 @@
 // 空白安装 → 自检 → 无密钥导入课堂资料 → 独立本机模型 → 知识模块 → 重载。
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
+import {spawn,execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {readFile} from 'node:fs/promises';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -15,7 +15,7 @@ try {
  await page.goto(base);await page.getByRole('button',{name:'首次使用引导',exact:true}).click();
  await page.getByRole('heading',{name:'首次使用与环境自检',exact:true}).waitFor();
  await page.getByText('基础功能已可使用，不需要模型密钥。',{exact:true}).waitFor();
- await page.getByRole('button',{name:'导入文字资料',exact:true}).click();
+ await page.getByRole('button',{name:'导入 PDF / 文字资料',exact:true}).click();
  const source='网络使用 IP 进行跨网寻址，DHCP 自动分配 IP 地址。TCP 会确认与重传，UDP 不提供可靠性保证。\n\n```c\n#include <stdio.h>\n  printf("hello");\n```\n';
  await page.locator('input[name=materialFile]').setInputFiles({name:'网络课堂.md',mimeType:'text/markdown',buffer:Buffer.from(source)});
  await page.waitForFunction(()=>document.querySelector('textarea[name=content]')?.value.includes('#include'));
@@ -48,6 +48,21 @@ try {
  await page.getByRole('button',{name:'确认',exact:true}).click();await page.getByText('备份已合并',{exact:true}).waitFor();
  assert.equal((await (await page.request.get(base+'/api/library')).json()).videos.length,1);
 
+ await page.goto(base+'/#setup');
+ await page.getByRole('button',{name:'导入 PDF / 文字资料',exact:true}).click();
+ const pdfBytes=execFileSync(process.env.PYTHON_EXECUTABLE||'python3',['-c',`import io,sys
+from reportlab.pdfgen.canvas import Canvas
+b=io.BytesIO();c=Canvas(b);c.drawString(50,700,'Networking lesson: IP addressing and routing basics.');c.showPage();c.drawString(50,700,'FINAL PDF PAGE: DHCP assigns network addresses.');c.save();sys.stdout.buffer.write(b.getvalue())`]);
+ await page.locator('input[name=materialFile]').setInputFiles({name:'network.pdf',mimeType:'application/pdf',buffer:pdfBytes});
+ await page.waitForFunction(()=>document.querySelector('textarea[name=content]')?.value.includes('FINAL PDF PAGE'));
+ assert((await page.locator('#material-file-status').innerText()).includes('2 页'));
+ await page.locator('input[name=generate]').uncheck();
+ await page.getByRole('button',{name:'保存课堂资料',exact:true}).click();
+ await page.getByRole('heading',{name:'network',exact:true}).waitFor();
+ await page.reload();await page.getByRole('heading',{name:'network',exact:true}).waitFor();
+ const afterPDF=await (await page.request.get(base+'/api/library')).json();
+ assert.equal(afterPDF.videos.length,2);assert(afterPDF.videos[1].transcript.includes('[PDF 第 2 页]'));
+ if(process.env.STUDY_ATLAS_SCREENSHOT)await page.screenshot({path:process.env.STUDY_ATLAS_SCREENSHOT,fullPage:true});
  await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
- assert.deepEqual(errors,[]);console.log('新用户流程通过：空白安装 → 自检 → 无密钥 Markdown 导入 → 代码保留 → 独立本机模型 → 生成知识模块 → 刷新 → JSON 迁移去重 → 手机布局。');
+ assert.deepEqual(errors,[]);console.log('新用户流程通过：空白安装 → 自检 → 无密钥 Markdown 导入 → 代码保留 → 独立本机模型 → 生成知识模块 → 刷新 → JSON 迁移去重 → PDF 上传提取与页码 → 保存与刷新 → 手机布局。');
 } finally {await browser?.close();server.kill('SIGINT');}

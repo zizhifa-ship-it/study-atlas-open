@@ -68,3 +68,9 @@ New original material, to the extent the maintainer has authority to license it,
 Code and documentation previously published under MIT through commit `7bcb7e431bc6a7f1725cbab534906afbb7f7285e`, including the existing core functionality and that material retained in later releases, remain under [the original MIT license](LICENSE-MIT-LEGACY), including commercial-use rights. This change is not retroactive. The new restricted license is source-available, not OSI open source. Third-party rights remain unchanged.
 
 Reproducible bug reports are welcome. Do not attach credentials, personal libraries or private captions to public issues.
+
+### Long videos and PDF import
+
+Transcripts and text materials support up to 800,000 characters without silently dropping the tail. Long sources use bounded paragraph chunks, hierarchical summaries and validated, model-specific caches; completed chunks can be reused after interruption. Local models receive smaller inputs. AI digests can still miss details; check the source.
+
+Import a PDF from onboarding/material import, preview extracted text and page numbers, then save and optionally generate Cornell notes, knowledge modules and mind maps. PDFs can also supplement an existing video under Quality & Sources. Install `python3 -m pip install -r requirements.txt`. Limits: 8 MB, 300 pages, 800,000 characters. Unlock password-protected PDFs first; scanned pages require external OCR. Images are not interpreted, and pages with no readable text produce a warning. Parsing runs in a local, time-limited worker; original PDF bytes are not retained. Only extracted text is saved and, when requested, sent to your selected AI provider.

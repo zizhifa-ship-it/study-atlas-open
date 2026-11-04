@@ -226,13 +226,14 @@ def build_knowledge(store, integrations, vid, progress, prepared=None, review_on
     try:
         from ai_efficiency import model_identity
         model_key = model_identity(integrations)
-        if checkpoint.get("fingerprint") != fingerprint or checkpoint.get("mode") != mode or checkpoint.get("version") != 3 or checkpoint.get('modelKey') != model_key:
+        if checkpoint.get("fingerprint") != fingerprint or checkpoint.get("mode") != mode or checkpoint.get("version") != 3 or (len(source) > 12000 and checkpoint.get("preparationVersion") != 2) or checkpoint.get('modelKey') != model_key:
             checkpoint = {"version": 3, "fingerprint": fingerprint, "mode": mode, 'modelKey': model_key}
         generator = select_generator(integrations)
         material = checkpoint.get("material") or (prepared if prepared is not None else prepare_material(source, generator, lambda i, n: progress("知识模块：整理资料第 %d/%d 段" % (i, n)), engine=integrations))
         checkpoint["material"] = material
+        checkpoint["preparationVersion"] = 2
         save_checkpoint()
-        kind = source_kind + ("的分段摘录" if len(source) > 80000 else "")
+        kind = source_kind + ("的分段摘录" if len(source) > 12000 else "")
         if checkpoint.get("draft"):
             draft = checkpoint["draft"]
             draft["modules"] = [validate_module(m) for m in draft["modules"]]

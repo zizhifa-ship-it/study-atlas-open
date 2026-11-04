@@ -294,7 +294,7 @@ def validate_library(payload):
             "tags": list(dict.fromkeys(string(t, "标签", 60) for t in tags)),
             "status": status, "favorite": video.get("favorite", False),
             "summary": string(video.get("summary", ""), "知识总结", 30000, True),
-            "transcript": string(video.get("transcript", ""), "字幕或转录", 200000, True, preserve=True),
+            "transcript": string(video.get("transcript", ""), "字幕或转录", 800000, True, preserve=True),
             "automation": clean_automation(video.get("automation", {})),
             "knowledge": validate_knowledge(video.get("knowledge")),
             "notes": clean_notes,
@@ -461,7 +461,8 @@ def make_handler(store, integrations=None, lan=False, auth=None):
         def read_json_body(self):
             lengths = self.headers.get_all('Content-Length', [])
             require(len(lengths) == 1 and lengths[0].isdigit() and not self.headers.get('Transfer-Encoding'), '请求长度格式不正确')
-            length = int(lengths[0]); require(0 < length <= MAX_BODY, '请求内容为空或过大（最多 4 MB）')
+            limit = 12 * 1024 * 1024 if urlsplit(self.path).path == '/api/material/pdf' else MAX_BODY
+            length = int(lengths[0]); require(0 < length <= limit, '请求内容为空或过大')
             raw = self.rfile.read(length)
             require(len(raw) == length, '请求内容没有完整传输')
             return strict_json(raw)
@@ -565,6 +566,7 @@ def make_handler(store, integrations=None, lan=False, auth=None):
                           "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                           "/harness-models.js": ("harness-models.js", "text/javascript; charset=utf-8"),
                           "/api-client.js": ("api-client.js", "text/javascript; charset=utf-8"),
+                          "/file-import.js": ("file-import.js", "text/javascript; charset=utf-8"),
                           "/knowledge.js": ("knowledge.js", "text/javascript; charset=utf-8"),
                           "/practice.js": ("practice.js", "text/javascript; charset=utf-8"),
                           "/exports.js": ("exports.js", "text/javascript; charset=utf-8"),
@@ -611,6 +613,9 @@ def make_handler(store, integrations=None, lan=False, auth=None):
                     result = importer.submit(string(data.get("url"), "视频链接", 3000), data.get("retry") is True, data.get("detailed", True) is not False)
                 elif path == '/api/tasks/resume':
                     result = importer.resume(string(data.get('videoId'), '视频编号', 100))
+                elif path == '/api/material/pdf':
+                    from pdf_import import read_pdf_upload
+                    result = read_pdf_upload(data)
                 elif path == '/api/material/course':
                     result = importer.submit_material(data)
                 elif path == '/api/papers/lookup':
@@ -651,7 +656,7 @@ def make_handler(store, integrations=None, lan=False, auth=None):
                     from materials import parse_material
                     vid = string(data.get('videoId'), '视频编号', 100)
                     filename = string(data.get('filename', 'transcript.txt'), '文件名', 200)
-                    raw = string(data.get('content'), '字幕或转录', 200000, preserve=True)
+                    raw = string(data.get('content'), '字幕或转录', 800000, preserve=True)
                     _, _, transcript = parse_material({'title':'补充学习资料','filename':filename,'content':raw})
                     with store.lock:
                         latest = store.read(); target = next((v for v in latest['videos'] if v['id'] == vid), None)

@@ -21,7 +21,7 @@ from security import public_urlopen
 
 urlopen = partial(public_urlopen, domains=['youtube.com', 'google.com'])
 
-MAX_TEXT = 200000
+MAX_TEXT = 800000
 
 
 def canonical_video(raw):
@@ -93,7 +93,7 @@ def _add_caption(lines, times, text, start=None):
 def _finish_captions(lines, times):
     text = '\n'.join(lines).strip()
     if not 20 <= len(text) <= MAX_TEXT:
-        raise IntegrationError('转录需要 20 至 200000 个字符，请检查内容或按章节导入')
+        raise IntegrationError('转录需要 20 至 800000 个字符，请检查内容或按章节导入')
     return text, times if len(times) == len(lines) else []
 
 

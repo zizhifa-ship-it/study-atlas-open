@@ -30,7 +30,7 @@ class NotesTests(unittest.TestCase):
             return {"content":"本段要点"}
         text="前段资料" * 24000 + "仅尾部出现的重要结论"
         combined=prepare_material(text,model)
-        self.assertEqual(len(seen),2)
+        self.assertEqual(len(seen),9)
         self.assertIn("仅尾部出现的重要结论",seen[-1])
         self.assertIn(str(len(text)),combined)
     def test_export_payload_excludes_transcript_and_credentials(self):

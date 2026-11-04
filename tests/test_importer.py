@@ -95,7 +95,7 @@ class ImportTests(unittest.TestCase):
     def test_long_video_covers_tail_and_replaces_old_summary_with_history(self):
         self.ai.transcript = lambda url, **kwargs: {"transcript":"分层网络课程。" * 14000 + "尾部独有概念：负载均衡适用条件"}
         v,_ = self.submit()
-        self.assertEqual(self.ai.calls,3)
+        self.assertEqual(self.ai.calls,10)
         self.assertTrue(any("尾部独有概念" in prompt for prompt in self.ai.prompts))
         self.assertIn("全部字幕已分段",v["summary"])
         self.importer.submit(v["url"],retry=True)

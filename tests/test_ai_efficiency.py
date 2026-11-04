@@ -63,10 +63,10 @@ class EfficiencyTests(unittest.TestCase):
         def generate(prompt): calls.append(prompt); return {'content': prompt.split('资料：\n')[-1][-30:]}
         source = '甲' * 80000 + '乙' * 79990 + '尾部独有结论'
         before = prepare_material(source, generate, engine=self.ai)
-        self.assertEqual(before, prepare_material(source, generate, engine=self.ai)); self.assertEqual(len(calls), 2)
+        self.assertEqual(before, prepare_material(source, generate, engine=self.ai)); self.assertEqual(len(calls), 14)
         changed = source[:-1] + '新'
         self.assertIn('尾部独有结新', prepare_material(changed, generate, engine=self.ai))
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls), 15)
     def test_actual_usage_is_separate_from_character_savings(self):
         record_model_call(self.ai, '中文prompt', {'usage': {'prompt_tokens': 12, 'completion_tokens': 8}})
         record_model_call(self.ai, 'no usage', {})
