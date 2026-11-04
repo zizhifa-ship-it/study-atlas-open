@@ -78,3 +78,9 @@ Import a PDF from onboarding/material import, preview extracted text and page nu
 ### Independent iPad access and web API mode
 
 Select **DeepSeek official API** in AI settings to check connectivity, load your account's model list and save the selected model from the website. Keys stay in the backend. For use while your Mac is off, deploy the optional single-owner HTTPS server using `deploy/compose.yml`; it reuses the current library, task queue and note pipeline, while local Harness support stays available in the desktop installation. See [deployment and web API instructions](docs/iPad独立部署与网页API.md). Configuration is supplied; no hosted instance is created automatically.
+
+### Browser-only edition: no running Mac required
+
+Open [Study Atlas Browser](https://zizhifa-ship-it.github.io/study-atlas-open/) on iPad Safari. Bring your own DeepSeek API key, choose an account model, import PDF/text/transcripts, and create Cornell notes, knowledge modules, mind maps and source-based chat. The static client calls DeepSeek directly; no Python, Harness or personal server is required.
+
+Notes stay in the current browser's IndexedDB; the key is kept in page memory by default and is cleared on reload. Export JSON before clearing browser data. There is no automatic cross-device sync. Video links can be saved, but platform captions may be blocked by browser CORS; supply transcripts or handouts rather than generating content from titles. Desktop and private-server editions remain available. See the [browser guide](docs/浏览器独立版.md).
