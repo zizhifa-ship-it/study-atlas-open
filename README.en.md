@@ -27,7 +27,7 @@ Download the source ZIP and extract it into your own user folder. Python **3.9+*
 
 Open `http://127.0.0.1:8765`. Keep the terminal running. Use `--port 8766` if needed. By default the app binds to loopback only. To use an iPad/phone on the same trusted Wi-Fi, start with `sh start.sh --lan` (or `start.bat --lan`), then open the private IP printed in the terminal and enter the code from `.local/lan-code.txt`. LAN mode is opt-in and requires a session cookie; it is not public hosting. See [LAN and iPad access](docs/局域网与iPad访问.md).
 
-Open **首次使用 / 环境自检** in the sidebar for a read-only setup check. You can import TXT, Markdown or caption files before connecting AI. Plain text and Markdown preserve code indentation and line breaks. PDF / Word files need text extraction first.
+Open **首次使用 / 环境自检** in the sidebar for a read-only setup check. You can import TXT, Markdown, PDF, DOCX, HTML or caption files before connecting AI. Text is extracted locally without a model call; plain text and Markdown preserve code indentation and line breaks. You can also append a local file to an existing long video and choose to save only, rebuild modules, or run a full refresh.
 
 ## Choose an AI connection
 

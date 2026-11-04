@@ -115,6 +115,29 @@ def clean_transcript_info(value, transcript):
     if isinstance(timeline, list) and 0 < len(timeline) <= 5000 and len(timeline) == len(lines):
         if all(type(second) is int and 0 <= second <= 3600000 for second in timeline) and all(first <= second for first, second in zip(timeline, timeline[1:])):
             clean['timeline'] = timeline
+    materials = value.get('materials')
+    if isinstance(materials, list):
+        result, seen = [], set()
+        for item in materials[:20]:
+            if not isinstance(item, dict):
+                continue
+            filename = item.get('filename')
+            characters = item.get('characters')
+            sha256 = item.get('sha256')
+            if (not isinstance(filename, str) or not filename.strip() or len(filename.strip()) > 200 or
+                    type(characters) is not int or not 0 <= characters <= 800000 or
+                    not isinstance(sha256, str) or not re.fullmatch(r'[a-f0-9]{64}', sha256)):
+                continue
+            if sha256 in seen:
+                continue
+            seen.add(sha256)
+            entry = {'filename': filename.strip(), 'characters': characters, 'sha256': sha256,
+                     'addedAt': clean['createdAt'] if not isinstance(item.get('addedAt'), str) else item['addedAt'][:50]}
+            if item.get('mode') in {'append', 'replace'}:
+                entry['mode'] = item['mode']
+            result.append(entry)
+        if result:
+            clean['materials'] = result
     return clean
 
 
@@ -462,7 +485,7 @@ def make_handler(store, integrations=None, lan=False, auth=None, access_policy=N
         def read_json_body(self):
             lengths = self.headers.get_all('Content-Length', [])
             require(len(lengths) == 1 and lengths[0].isdigit() and not self.headers.get('Transfer-Encoding'), '请求长度格式不正确')
-            limit = 12 * 1024 * 1024 if urlsplit(self.path).path == '/api/material/pdf' else MAX_BODY
+            limit = 12 * 1024 * 1024 if urlsplit(self.path).path in {'/api/material/pdf', '/api/material/document'} else MAX_BODY
             length = int(lengths[0]); require(0 < length <= limit, '请求内容为空或过大')
             raw = self.rfile.read(length)
             require(len(raw) == length, '请求内容没有完整传输')
@@ -623,6 +646,9 @@ def make_handler(store, integrations=None, lan=False, auth=None, access_policy=N
                 elif path == '/api/material/pdf':
                     from pdf_import import read_pdf_upload
                     result = read_pdf_upload(data)
+                elif path == '/api/material/document':
+                    from document_import import extract_document
+                    result = extract_document(data)
                 elif path == '/api/material/course':
                     result = importer.submit_material(data)
                 elif path == '/api/papers/lookup':
@@ -663,27 +689,7 @@ def make_handler(store, integrations=None, lan=False, auth=None, access_policy=N
                     require(target is not None, "视频不存在")
                     result = integrations.transcript(target["url"])
                 elif path == '/api/material/import':
-                    from materials import parse_material
-                    vid = string(data.get('videoId'), '视频编号', 100)
-                    filename = string(data.get('filename', 'transcript.txt'), '文件名', 200)
-                    raw = string(data.get('content'), '字幕或转录', 800000, preserve=True)
-                    _, _, transcript = parse_material({'title':'补充学习资料','filename':filename,'content':raw})
-                    with store.lock:
-                        latest = store.read(); target = next((v for v in latest['videos'] if v['id'] == vid), None)
-                        require(target is not None, '视频不存在')
-                        target['transcript'] = transcript
-                        target['transcriptInfo'] = {'kind': 'imported', 'source': '导入的字幕或转录文件', 'language': '', 'createdAt': datetime.now(timezone.utc).isoformat()}
-                        saved = store.save(latest)
-                    if data.get('generate', True) is not False:
-                        try:
-                            from video_sources import canonical_video_url
-                            canonical_video_url(target['url'])
-                        except IntegrationError:
-                            result = importer.submit_knowledge(vid)
-                        else:
-                            result = importer.submit(target['url'], True, True)
-                    else:
-                        result = {'library': saved, 'videoId': vid}
+                    result = importer.submit_supplement(data)
                 elif path == "/api/youtube/client":
                     result = integrations.save_youtube_client(data)
                 elif path == "/api/youtube/auth-url":

@@ -31,3 +31,32 @@ def parse_material(data):
         raise IntegrationError('有效资料需要 20 至 800000 个字符，请按章节导入')
     if type(data.get('generate', False)) is not bool: raise IntegrationError('自动整理选项不正确')
     return title.strip(), filename, content
+
+
+def combine_material(existing, incoming, filename, mode='append'):
+    """Append or replace a local supplement without silently dropping text.
+
+    Returning ``added=False`` for an exact repeat lets callers avoid an AI call
+    and prevents duplicated long transcripts.  APPEND keeps the existing source
+    byte-for-byte, which also preserves reusable long-video chunk caches.
+    """
+    from integrations import IntegrationError
+    if mode not in {'append', 'replace'}:
+        raise IntegrationError('补充方式不正确')
+    if not isinstance(existing, str) or not isinstance(incoming, str):
+        raise IntegrationError('学习资料格式不正确')
+    if mode == 'append' and incoming.strip() and incoming.strip() in existing:
+        return existing, 0, True
+    if mode == 'replace' and incoming.strip() == existing.strip():
+        return existing, 0, True
+    if not existing.strip():
+        combined = incoming
+    elif mode == 'replace':
+        combined = incoming
+    else:
+        safe_name = re.sub(r'[\r\n\[\]]+', ' ', PurePosixPath(filename.replace('\\', '/')).name).strip()[:160] or '补充文件'
+        marker = '\n\n[补充资料：%s]\n' % safe_name
+        combined = existing.rstrip() + marker + incoming.strip()
+    if len(combined) > 800000:
+        raise IntegrationError('现有资料与补充文件合计超过 80 万字符，请精简或分课程导入；原资料未覆盖')
+    return combined, len(combined) - len(existing), False

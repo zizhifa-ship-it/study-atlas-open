@@ -1,5 +1,6 @@
 from integrations import select_generator, selected_model
 """粘贴公开视频链接后在本机队列中识别、分类、整理并保存。"""
+import hashlib
 import json
 import queue
 import re
@@ -104,6 +105,103 @@ class AutoImporter:
             saved = self.store.save(library)
             if generate: self.queue.put_nowait((vid, 'knowledge'))
             return {'videoId':vid,'library':saved,'queued':generate}
+
+    def submit_supplement(self, data):
+        """Append or replace a local file, then optionally queue a bounded rebuild.
+
+        Reading and validation happen locally. A repeated file is detected
+        before any model call. Appending preserves the original source prefix,
+        so long-video chunk caches for already processed prefix chunks remain
+        reusable.
+        """
+        from materials import combine_material, is_material_url, parse_material
+        vid = data.get('videoId')
+        if not isinstance(vid, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', vid):
+            raise IntegrationError('视频编号不正确')
+        filename = data.get('filename', 'transcript.txt')
+        if not isinstance(filename, str) or not 1 <= len(filename) <= 255:
+            raise IntegrationError('文件名不正确')
+        raw = data.get('content')
+        if not isinstance(raw, str) or not 20 <= len(raw) <= 800000:
+            raise IntegrationError('请导入 20 至 800000 字符的资料')
+        mode = data.get('mode', 'append')
+        if mode not in {'append', 'replace'}:
+            raise IntegrationError('补充方式不正确')
+        task = data.get('task')
+        if task is None:
+            task = 'full' if data.get('generate', True) is not False else 'save'
+        if task not in {'save', 'knowledge', 'full'}:
+            raise IntegrationError('整理范围不正确')
+        _, filename, incoming = parse_material({
+            'title': '补充学习资料', 'filename': filename, 'content': raw,
+        })
+        stamp = datetime.now(timezone.utc).isoformat()
+        digest = hashlib.sha256(incoming.encode('utf-8')).hexdigest()
+        with self.lock, self.store.lock:
+            library = self.store.read()
+            target = next((v for v in library['videos'] if v['id'] == vid), None)
+            if target is None:
+                raise IntegrationError('视频不存在')
+            active = target.get('automation', {}).get('status') in ACTIVE
+            if task != 'save' and not active and self.queue.full():
+                raise IntegrationError('整理队列已满，请稍后重试；本次文件尚未写入')
+            existing = target.get('transcript', '')
+            combined, added, duplicate = combine_material(existing, incoming, filename, mode)
+            if not duplicate:
+                previous = target.get('transcriptInfo') or {}
+                previous_materials = previous.get('materials') if isinstance(previous.get('materials'), list) else []
+                imported = [m for m in previous_materials if isinstance(m, dict)]
+                if mode == 'replace':
+                    imported = []
+                if not any(m.get('sha256') == digest for m in imported):
+                    imported.append({'filename': filename[:200], 'characters': len(incoming),
+                                     'sha256': digest, 'addedAt': stamp, 'mode': mode})
+                old_source = previous.get('source') if isinstance(previous.get('source'), str) else ''
+                if mode == 'replace' or not old_source:
+                    source = ('本地文件：' + filename)[:200]
+                else:
+                    source = (old_source + ' + 补充文件：' + filename)[:200]
+                info = {'kind': 'imported', 'source': source, 'language': previous.get('language', '') if isinstance(previous.get('language'), str) else '',
+                        'createdAt': stamp}
+                chapters = previous.get('chapters')
+                if mode == 'append' and isinstance(chapters, list) and chapters:
+                    info['chapters'] = chapters
+                if imported:
+                    info['materials'] = imported[-20:]
+                target['transcript'] = combined
+                target['transcriptInfo'] = info
+                target['updatedAt'] = stamp
+                library = self.store.save(library)
+            queued = False
+            queue_error = ''
+            source_url = target.get('url', '')
+            video_active = target.get('automation', {}).get('status') in ACTIVE
+        if task != 'save' and not duplicate and not video_active:
+            try:
+                use_knowledge = task == 'knowledge' or is_material_url(source_url)
+                if not use_knowledge:
+                    try:
+                        from video_sources import canonical_video_url
+                        canonical_video_url(source_url)
+                    except IntegrationError:
+                        use_knowledge = True
+                if use_knowledge:
+                    queued_result = self.submit_knowledge(vid)
+                else:
+                    queued_result = self.submit(source_url, retry=True, detailed=True)
+                if queued_result.get('library') is not None:
+                    library = queued_result['library']
+                queued = not bool(queued_result.get('duplicate'))
+            except IntegrationError as exc:
+                queue_error = str(exc)
+        elif task != 'save' and video_active:
+            queue_error = '课程正在整理，文件已保存且未丢失；当前任务可能因资料变化停止，请在整理任务中查看并按需继续'
+        elif task != 'save' and duplicate:
+            queue_error = '相同文件内容已在资料中，未重复调用 AI'
+        return {'videoId': vid, 'library': library, 'queued': queued, 'active': video_active,
+                'duplicate': duplicate, 'mode': mode, 'task': task,
+                'importedCharacters': len(incoming), 'addedCharacters': added,
+                'totalCharacters': len(combined), 'message': queue_error}
 
     def update(self, vid, **fields):
         with self.store.lock:
