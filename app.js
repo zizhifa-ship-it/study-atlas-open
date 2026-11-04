@@ -249,7 +249,7 @@ function detailPage() {
 }
 function qualityPage() {
   return heading('按需查看','质量与来源','查看资料来源、核对问题和修订记录。日常阅读请进入课程笔记。')
-    + state.library.videos.map(v=>`<details class="panel quality-course" data-quality-video="${esc(v.id)}"${state.id===v.id?' open':''}><summary>${esc(displayTitle(v))}<span class="quality-meta">${v.knowledge ? v.knowledge.modules.length+' 个模块' : '模块尚未完成'}</span></summary><div class="quality-content"><p><strong>来源：</strong>${esc(v.transcriptInfo?.source || (v.transcript ? '已保存的课程资料' : '尚无学习资料'))}${v.transcriptInfo?.language?' · '+esc(v.transcriptInfo.language):''}</p>${(v.transcriptInfo?.materials||[]).length?`<p class="metadata">已补充文件：${v.transcriptInfo.materials.map(m=>esc(m.filename)+'（'+Number(m.characters||0).toLocaleString()+' 字符）').join('、')}</p>`:''}${v.transcriptInfo?.kind==='asr'?'<p class="notice">本机语音识别可能误听术语、数字与代码，请结合课程核对。</p>':''}<p class="metadata">最近任务：${esc(v.automation?.message || '尚无记录')}${v.automation?.model?' · 模型：'+esc(v.automation.model):''}</p><div class="button-row"><button class="button small" data-action="navigate" data-view="video" data-id="${esc(v.id)}">打开笔记</button><button class="button small soft" data-action="format-cornell" data-id="${esc(v.id)}" ${v.knowledge?'':'disabled'}>AI 整理康奈尔结构</button><button class="button small" data-action="build-knowledge" data-id="${esc(v.id)}">重新构建模块</button>${['YouTube','哔哩哔哩'].includes(platform(v.url))?`<button class="button small" data-action="retry-import" data-id="${esc(v.id)}">重新获取与整理</button>`:''}</div>${v.visuals?`<p class="metadata">图文导学：${esc(v.visuals.message)}。画面用于回顾，AI 笔记依据字幕或转录整理。</p>`:''}${platform(v.url)==='课堂资料'?'':`<button class="button small" data-action="build-visuals" data-id="${esc(v.id)}">重新生成图文导学</button>`}${qualityReport(v)}${v.notes.some(n=>n.text.startsWith('旧版总结（'))?`<details class="saved-history"><summary>历史总结版本</summary>${v.notes.filter(n=>n.text.startsWith('旧版总结（')).map(n=>`<article class="review-issue"><p class="metadata">${esc(n.createdAt.slice(0,10))}</p><div class="rich-notes">${renderMarkdown(n.text)}</div></article>`).join('')}</details>`:''}<section class="panel"><details><summary>字幕与学习资料（通常由网站自动读取）</summary><div class="section-head" style="margin-top:15px"><h2>原始资料</h2>${platform(v.url)==='课堂资料'?'':`<button class="button small" data-action="fetch-transcript" data-id="${esc(v.id)}">获取原字幕 / 本机转录</button>`}<button class="button small soft" data-action="import-transcript" data-id="${esc(v.id)}">补充资料文件（本机读取，可选 AI）</button></div><form data-transcript-form="${esc(v.id)}"><label class="field"><span>转录文本 / 课堂资料（供 AI 整理使用）</span><textarea name="transcript" maxlength="3000000" rows="6" placeholder="读取字幕，或将视频页面的转录文本粘贴到这里。AI 会依据这些资料及你的笔记整理。">${esc(v.transcript || '')}</textarea><small>${(v.transcript || '').length.toLocaleString()} 字符 · 资料先保存，AI 才会使用；部分视频的字幕可能无法自动读取。</small></label><button class="button small" type="submit">保存学习资料</button></form><p class="metadata">文件在本机解析，不调用 AI。追加时会保留已有资料；保存后可选择只保存或让 AI 重建笔记。</p></details></section></div></details>`).join('');
+    + state.library.videos.map(v=>`<details class="panel quality-course" data-quality-video="${esc(v.id)}"${state.id===v.id?' open':''}><summary>${esc(displayTitle(v))}<span class="quality-meta">${v.knowledge ? v.knowledge.modules.length+' 个模块' : '模块尚未完成'}</span></summary><div class="quality-content"><p><strong>来源：</strong>${esc(v.transcriptInfo?.source || (v.transcript ? '已保存的课程资料' : '尚无学习资料'))}${v.transcriptInfo?.language?' · '+esc(v.transcriptInfo.language):''}</p>${(v.transcriptInfo?.materials||[]).length?`<p class="metadata">已补充文件：${v.transcriptInfo.materials.map(m=>esc(m.filename)+'（'+Number(m.characters||0).toLocaleString()+' 字符）').join('、')}</p>`:''}${v.transcriptInfo?.digestInfo?`<p class="metadata">AI 辅助摘录：${Number(v.transcriptInfo.digestInfo.digestCharacters||0).toLocaleString()} / ${Number(v.transcriptInfo.digestInfo.originalCharacters||0).toLocaleString()} 字符；只把摘录发送给模型。</p>`:''}${v.transcriptInfo?.kind==='asr'?'<p class="notice">本机语音识别可能误听术语、数字与代码，请结合课程核对。</p>':''}<p class="metadata">最近任务：${esc(v.automation?.message || '尚无记录')}${v.automation?.model?' · 模型：'+esc(v.automation.model):''}</p><div class="button-row"><button class="button small" data-action="navigate" data-view="video" data-id="${esc(v.id)}">打开笔记</button><button class="button small soft" data-action="format-cornell" data-id="${esc(v.id)}" ${v.knowledge?'':'disabled'}>AI 整理康奈尔结构</button><button class="button small" data-action="build-knowledge" data-id="${esc(v.id)}">重新构建模块</button>${['YouTube','哔哩哔哩'].includes(platform(v.url))?`<button class="button small" data-action="retry-import" data-id="${esc(v.id)}">重新获取与整理</button>`:''}</div>${v.visuals?`<p class="metadata">图文导学：${esc(v.visuals.message)}。画面用于回顾，AI 笔记依据字幕或转录整理。</p>`:''}${platform(v.url)==='课堂资料'?'':`<button class="button small" data-action="build-visuals" data-id="${esc(v.id)}">重新生成图文导学</button>`}${qualityReport(v)}${v.notes.some(n=>n.text.startsWith('旧版总结（'))?`<details class="saved-history"><summary>历史总结版本</summary>${v.notes.filter(n=>n.text.startsWith('旧版总结（')).map(n=>`<article class="review-issue"><p class="metadata">${esc(n.createdAt.slice(0,10))}</p><div class="rich-notes">${renderMarkdown(n.text)}</div></article>`).join('')}</details>`:''}<section class="panel"><details><summary>字幕与学习资料（通常由网站自动读取）</summary><div class="section-head" style="margin-top:15px"><h2>原始资料</h2>${platform(v.url)==='课堂资料'?'':`<button class="button small" data-action="fetch-transcript" data-id="${esc(v.id)}">获取原字幕 / 本机转录</button>`}<button class="button small soft" data-action="import-transcript" data-id="${esc(v.id)}">补充资料文件（本机读取，可选 AI）</button></div><form data-transcript-form="${esc(v.id)}"><label class="field"><span>转录文本 / 课堂资料（供 AI 整理使用）</span><textarea name="transcript" maxlength="3000000" rows="6" placeholder="读取字幕，或将视频页面的转录文本粘贴到这里。AI 会依据这些资料及你的笔记整理。">${esc(v.transcript || '')}</textarea><small>${(v.transcript || '').length.toLocaleString()} 字符 · 资料先保存，AI 才会使用；部分视频的字幕可能无法自动读取。</small></label><button class="button small" type="submit">保存学习资料</button></form><p class="metadata">文件在本机解析，不调用 AI。追加时会保留已有资料；保存后可选择只保存或让 AI 重建笔记。</p></details></section></div></details>`).join('');
 }
 
 function paperAuthors(p) {
@@ -413,10 +413,10 @@ async function materialModal() {
     <label class="field"><span>从文件读取（可选）</span><input type="file" name="materialFile" accept=".pdf,.docx,.html,.htm,.txt,.md,.markdown,.srt,.vtt,.json,.json3"><small>PDF / DOCX / HTML 最多 32 MB；PDF 最多 1000 页；文字文件最多 16 MB，正文最多 300 万字符。扫描件需先 OCR。</small></label>
     <input type="hidden" name="filename" value="课堂资料.txt"><p class="notice" id="material-file-status" role="status" hidden></p>
     <label class="field"><span>原始文字或 Markdown</span><textarea name="content" required minlength="20" maxlength="3000000" rows="9" placeholder="粘贴课堂讲义、文章笔记或字幕。TXT / Markdown 中的代码与缩进会原样保存。"></textarea></label>
-    <label class="source-choice"><input type="checkbox" name="generate"${setup.aiConfigured?' checked':''}><span>保存后由 AI 制作知识模块、脑图与复习问答<small>${setup.aiConfigured?'使用当前模型额度，进度在“整理任务”中查看。':'当前尚未配置 AI。可以先保存资料，之后选择模型再整理。'}</small></span></label>
+    <label class="source-choice"><input type="checkbox" name="generate"${setup.aiConfigured?' checked':''}><span>保存后由 AI 制作总结、知识模块、脑图与复习问答<small>${setup.aiConfigured?'使用当前模型额度；超长文件只把本机结构摘录交给模型，不发送全文。进度在“整理任务”中查看。':'当前尚未配置 AI。可以先保存资料，之后选择模型再整理。'}</small></span></label>
     ${actions('保存课堂资料')}</form>`,async form=>{
       const result=await post('/api/material/course',{title:form.get('title'),categoryId:form.get('categoryId'),filename:form.get('filename'),content:form.get('content'),generate:form.get('generate')==='on'});
-      state.library=result.library;state.dirty=false;go('video',result.videoId);toast(result.queued?'资料已保存，AI 已加入整理队列':'课堂资料已保存，可以批注或稍后制作 AI 笔记');
+      state.library=result.library;state.dirty=false;go('video',result.videoId);toast(result.queued?'资料已保存，AI 已加入整理队列；超长文件使用本机结构摘录':'课堂资料已保存，可以批注或稍后制作 AI 笔记');
     });
   const form=modal.querySelector('form');
   form.elements.namedItem('materialFile').addEventListener('change',async event=>{
@@ -428,9 +428,9 @@ async function materialModal() {
       form.elements.namedItem('content').value=material.content;
       form.elements.namedItem('filename').value=material.filename;
       const huge=material.content.length>200000;
-      if(huge) form.elements.namedItem('generate').checked=false;
+      if(huge && setup.aiConfigured===false) form.elements.namedItem('generate').checked=false;
       if(!form.elements.namedItem('title').value)form.elements.namedItem('title').value=material.title;
-      status.textContent=(material.pages?'已在本机读取 '+material.pages+' 页，':'已在本机读取资料，')+material.content.length.toLocaleString()+' 字符，未调用 AI。'+(huge?' 资料较长，已默认仅保存，避免一次触发大量模型请求。':'')+(material.warning||'请确认正文后保存。');
+      status.textContent=(material.pages?'已在本机读取 '+material.pages+' 页，':'已在本机读取资料，')+material.content.length.toLocaleString()+' 字符，未调用 AI。'+(huge?(setup.aiConfigured?' 资料较长，保存后 AI 只读取本机结构摘录，不发送全文。':' 当前未配置 AI，已默认仅保存。'):'')+(material.warning||'请确认正文后保存。');
       form.querySelector('.form-error').textContent='';
     }
     catch(error) {form.querySelector('.form-error').textContent=error.message;}
@@ -445,29 +445,31 @@ async function supplementModal(videoId, material) {
   const huge=incoming>200000;
   const imported=(v.transcriptInfo?.materials||[]).slice(-5);
   const active=['queued','metadata','transcript','ai'].includes(v.automation?.status);
-  const defaultTask=(active||huge)?'save':setup.aiConfigured===true?(v.summary?.trim()?'knowledge':'full'):'save';
+  const defaultTask=active?'save':setup.aiConfigured===true?'notes':'save';
   const option=(value,label,suffix='')=>`<option value="${value}"${defaultTask===value?' selected':''}${(active||(!setup.aiConfigured&&value!=='save'))?' disabled':''}>${label}${suffix}</option>`;
   showModal('补充资料文件','文件已经在本机解析，读取阶段不调用 AI。追加会保留已有资料，已处理的同内容分段可直接复用，通常更省时间和额度。',`<form>
     <div class="notice"><strong>${esc(material.filename)}</strong><br>本次读取 ${incoming.toLocaleString()} 字符${material.pages?' · '+material.pages+' 页':''}。当前课程已有 ${current.toLocaleString()} 字符。${material.warning?'<br>'+esc(material.warning):''}</div>
     <details><summary>预览已读取正文</summary><pre style="white-space:pre-wrap;max-height:240px;overflow:auto;margin-top:8px">${esc(material.content.slice(0,2000))}${material.content.length>2000?'\n…':''}</pre></details>
     ${active?'<p class="notice">课程正在整理。本次先保存文件；若当前任务因资料变化停止，可在“整理任务”中继续。</p>':''}
-    ${huge?'<p class="notice">资料较长，已默认只保存，避免一次触发大量模型请求。保存后可在课程页按需单独重建知识模块。</p>':''}
+    ${huge?'<p class="notice">资料较长；选择“用补充资料生成笔记”时，AI 只读取本机结构摘要（最多约 2.4 万字符），不会接收全文。</p>':''}
     <fieldset class="field"><legend>资料处理方式</legend>
-      <label class="source-choice"><input type="radio" name="mode" value="append" checked><span>追加到已有资料<small>推荐：保留原字幕和已处理分段缓存，只处理新增内容。</small></span></label>
-      ${current?'<label class="source-choice"><input type="radio" name="mode" value="replace"><span>替换已有资料<small>不保留原字幕，缓存通常无法复用；原资料会被覆盖。</small></span></label>':''}
+      <label class="source-choice"><input type="radio" name="mode" value="reference"${defaultTask==='notes'?' checked':''}${setup.aiConfigured===true&&active===false?'':' disabled'}><span>仅作为 AI 辅助资料<small>推荐：不改动原字幕，只把本机结构摘录用于生成笔记，AI 不接收全文。</small></span></label>
+      <label class="source-choice"><input type="radio" name="mode" value="append"${defaultTask==='notes'?'':' checked'}><span>追加到已有资料<small>保留原字幕和已处理分段缓存，完整文件也保存进原文。</small></span></label>
+      ${current?'<label class="source-choice"><input type="radio" name="mode" value="replace"><span>替换已有资料<small>不保留原字幕；如果希望节省 token，优先选“仅作为 AI 辅助资料”。</small></span></label>':''}
     </fieldset>
     <label class="field"><span>保存后的整理范围</span><select name="task">
+      ${option('notes','用补充资料生成笔记（本机结构摘录，省 token）')}
       ${option('save','仅保存资料（不调用 AI，0 token）')}
       ${option('knowledge','只重建知识模块（不重写基础总结）')}
       ${option('full','完整整理（重写总结并重建模块）')}
-    </select><small>${setup.aiConfigured?'选择后两项会使用当前模型额度。':'当前尚未配置 AI，只能先保存资料。'}</small></label>
+    </select><small>${setup.aiConfigured?'生成笔记、重建模块或完整整理会使用当前模型额度；生成笔记不会发送补充资料全文。':'当前尚未配置 AI，只能先保存资料。'}</small></label>
     ${imported.length?`<p class="metadata">已补充：${imported.map(m=>esc(m.filename)).join('、')}</p>`:''}
     ${actions('保存补充资料')}
   </form>`,async form=>{
     const result=await post('/api/material/import',{videoId,filename:material.filename,content:material.content,mode:form.get('mode')||'append',task:form.get('task')||'save'});
     state.library=result.library;state.dirty=false;renderAll();
     if(result.duplicate) toast('相同文件内容已存在，没有重复添加，也没有调用 AI');
-    else if(result.queued) toast('已保存补充资料，AI 任务已加入队列');
+    else if(result.queued) toast(result.task==='notes'?('已保存补充资料，AI 将读取 '+Number(result.digestCharacters||0).toLocaleString()+' 字符本地摘录生成笔记'):'已保存补充资料，AI 任务已加入队列');
     else if(result.task==='save') toast('补充资料已保存，未调用 AI');
     else toast(result.message||'补充资料已保存；当前任务结束后可再重建笔记');
   });
@@ -1135,6 +1137,16 @@ $('#transcript-file').addEventListener('change',async event=>{
 });
 
 document.addEventListener('change',event=>{
+  if(event.target.name==='task') {
+    const form=event.target.closest('form');
+    const reference=form?.querySelector('input[name="mode"][value="reference"]');
+    if(reference) {
+      const isNotes=event.target.value==='notes';
+      reference.disabled=isNotes===false;
+      if(isNotes) reference.checked=true;
+      else if(reference.checked) form.querySelector('input[name="mode"][value="append"]').checked=true;
+    }
+  }
   const id=event.target.dataset.noteLanguage;
   if(id && noteLanguages[event.target.value]) {state.noteLanguages[id]=event.target.value;try{localStorage.setItem('study-atlas-note-languages',JSON.stringify(state.noteLanguages));}catch{}renderMain();}
 });

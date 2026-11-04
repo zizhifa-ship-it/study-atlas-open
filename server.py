@@ -134,11 +134,28 @@ def clean_transcript_info(value, transcript):
             seen.add(sha256)
             entry = {'filename': filename.strip(), 'characters': characters, 'sha256': sha256,
                      'addedAt': clean['createdAt'] if not isinstance(item.get('addedAt'), str) else item['addedAt'][:50]}
-            if item.get('mode') in {'append', 'replace'}:
+            if item.get('mode') in {'append', 'replace', 'reference'}:
                 entry['mode'] = item['mode']
             result.append(entry)
         if result:
             clean['materials'] = result
+    digest = value.get('digest')
+    if isinstance(digest, str) and digest.strip():
+        clean['digest'] = string(digest, '本地辅助摘录', 40000, preserve=True)
+        info = value.get('digestInfo')
+        if isinstance(info, dict):
+            method = info.get('method')
+            original = info.get('originalCharacters')
+            reduced = info.get('digestCharacters')
+            coverage = info.get('coverage')
+            filename = info.get('filename')
+            if (method == 'local-outline-v1' and type(original) is int and 20 <= original <= 3000000 and
+                    type(reduced) is int and 20 <= reduced <= 40000 and coverage in {'full', 'outline'} and
+                    isinstance(filename, str) and 1 <= len(filename.strip()) <= 200):
+                clean['digestInfo'] = {'method': method, 'originalCharacters': original,
+                                       'digestCharacters': reduced, 'coverage': coverage,
+                                       'filename': filename.strip(),
+                                       'createdAt': string(info.get('createdAt', ''), '辅助摘录时间', 50, True)}
     return clean
 
 

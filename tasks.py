@@ -5,7 +5,7 @@ from knowledge import material_hash, material_for
 
 ACTIVE = {'queued', 'metadata', 'transcript', 'ai'}
 TASK_NAMES = {'import':'视频笔记', 'detailed':'视频与详尽模块', 'knowledge':'知识模块',
-              'review':'笔记自查', 'format':'康奈尔版式', 'visuals':'图文导学'}
+              'supplement-notes':'补充资料辅助笔记', 'review':'笔记自查', 'format':'康奈尔版式', 'visuals':'图文导学'}
 
 
 def checkpoint_summary(engine, video):
@@ -37,6 +37,11 @@ def recovery_mode(engine, video):
         return task
     if task == 'knowledge':
         return 'knowledge'
+    if task == 'supplement-notes':
+        if checkpoint['available']:
+            return 'knowledge'
+        digest = (video.get('transcriptInfo') or {}).get('digest')
+        return 'supplement-notes' if isinstance(digest, str) and len(digest.strip()) >= 20 else 'saved-detailed'
     if task == 'import':
         return 'saved-import' if len(video.get('transcript', '').strip()) >= 20 else 'import'
     if checkpoint['available']:
