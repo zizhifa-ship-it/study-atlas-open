@@ -2,6 +2,7 @@
 import http.client
 import io
 import json
+import os
 import tempfile
 import threading
 import unittest
@@ -39,7 +40,9 @@ class PrivateAuthTests(unittest.TestCase):
             changed = PrivateAuth(root, PASSWORD + '-new')
             self.assertFalse(changed.valid_cookie(new_cookie)); self.assertTrue(changed.verify_code(PASSWORD + '-new'))
             text = auth.auth_file.read_text(); self.assertNotIn(PASSWORD, text)
-            self.assertEqual(auth.auth_file.stat().st_mode & 0o777, 0o600)
+            # Windows uses ACLs; POSIX mode bits do not describe its file access.
+            if os.name != "nt":
+                self.assertEqual(auth.auth_file.stat().st_mode & 0o777, 0o600)
 
     def test_fail_closed_without_https_or_strong_password(self):
         for origin in ['http://atlas.example.test', 'https://user:pw@atlas.test', 'https://*.test', 'https://atlas.test/path']:
