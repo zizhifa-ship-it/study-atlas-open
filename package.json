@@ -8,10 +8,11 @@
   "scripts": {
     "start": "python3 server.py --open",
     "test": "python3 -m unittest discover -s tests -v",
-    "check": "node --check file-import.js && node --check harness-models.js && node --check app.js && node --check knowledge.js && node --check practice.js && node --check exports.js && node --check cornell.js && node --check translations.js && node --check video-media.js && node --check api-client.js",
+    "check": "node --check deepseek-settings.js && node --check file-import.js && node --check harness-models.js && node --check app.js && node --check knowledge.js && node --check practice.js && node --check exports.js && node --check cornell.js && node --check translations.js && node --check video-media.js && node --check api-client.js",
     "test:js": "node --test tests/*.test.mjs",
     "test:browser": "node tests/browser_practice.mjs",
     "test:browser:notes": "node tests/browser_notes.mjs",
-    "test:browser:community": "node tests/browser_community.mjs"
+    "test:browser:community": "node tests/browser_community.mjs",
+    "test:browser:private": "node tests/browser_private_api.mjs"
   }
 }

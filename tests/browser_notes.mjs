@@ -26,7 +26,7 @@ try{
  await page.getByRole('button',{name:'再自查一次',exact:true}).waitFor();
  await page.locator('[data-quality-video="v1"]').getByText('字幕与学习资料（通常由网站自动读取）',{exact:true}).click();
  await page.locator('[data-transcript-form="v1"] textarea').fill('这是从文件导入的原始资料，足够用于课堂笔记整理与来源核对。');
- await page.getByRole('button',{name:'保存学习资料',exact:true}).click();await page.getByText('学习资料已保存',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'保存学习资料',exact:true}).click();await page.getByText('学习资料已保存；手动修改后旧时间轴已清除',{exact:true}).waitFor();
  await page.reload();await page.locator('.quality-course>summary').first().click();await page.locator('[data-quality-video="v1"]').getByText('字幕与学习资料（通常由网站自动读取）',{exact:true}).click();
  assert((await page.locator('[data-transcript-form="v1"] textarea').inputValue()).includes('从文件导入'));
  await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));

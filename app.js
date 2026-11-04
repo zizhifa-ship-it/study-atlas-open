@@ -1,3 +1,4 @@
+import {deepseekFields,bindDeepseekFields} from './deepseek-settings.js';
 import {readLearningFile} from './file-import.js';
 import {harnessModelFields,bindHarnessModelFields} from './harness-models.js';
 import {visualGuide,videoCover} from './video-media.js';
@@ -400,7 +401,7 @@ async function refreshSetup() {
 function setupPage() {
   const setup=state.setupData;
   return heading('从第一份资料开始','首次使用与环境自检','基础收藏、文字笔记和备份无需模型密钥；按需要逐步启用 AI、视频提取和导出。',`<button class="button" data-action="setup-refresh">重新检查</button>`)
-    + `<div class="setup-steps"><section class="panel"><span class="small-label">01 · 保存你的资料</span><h2>从视频，也从课堂讲义开始</h2><p>导入 PDF、TXT、Markdown 或字幕文件，保留正文、页码与代码；也可粘贴公开 YouTube、哔哩哔哩链接。</p><div class="button-row"><button class="button primary" data-action="import-material">导入 PDF / 文字资料</button><button class="button" data-action="new-video">粘贴视频链接</button></div></section><section class="panel"><span class="small-label">02 · 选择你的模型</span><h2>连接已有工具，或独立运行本机模型</h2><p>支持 Harness、DeepSeek 官方 API，以及 Ollama、LM Studio、硅基流动、OpenRouter 兼容接口。</p><button class="button soft" data-action="ai-settings">选择 AI 接入方式</button></section><section class="panel"><span class="small-label">03 · 理解、批注与迁移</span><h2>让笔记跟着你学习</h2><p>知识模块、脑图、自测和译文保存在本机。换电脑前导出 JSON 备份；AI 密钥需在新电脑重新配置。</p><div class="button-row"><button class="button" data-action="navigate" data-view="notes">查看学习笔记</button><button class="button" data-action="backup">导出与备份</button></div></section></div>`
+    + `<div class="setup-steps"><section class="panel"><span class="small-label">01 · 保存你的资料</span><h2>从视频，也从课堂讲义开始</h2><p>导入 PDF、TXT、Markdown 或字幕文件，保留正文、页码与代码；也可粘贴公开 YouTube、哔哩哔哩链接。</p><div class="button-row"><button class="button primary" data-action="import-material">导入 PDF / 文字资料</button><button class="button" data-action="new-video">粘贴视频链接</button></div></section><section class="panel"><span class="small-label">02 · 选择你的模型</span><h2>直接使用网页 API，或连接本机模型</h2><p>DeepSeek 官方 API 无需 Harness；可在 iPad 网页填写密钥并选择模型。也保留 Harness、Ollama 等接入方式。</p><button class="button soft" data-action="ai-settings">选择 AI 接入方式</button></section><section class="panel"><span class="small-label">03 · 理解、批注与迁移</span><h2>让笔记跟着你学习</h2><p>知识模块、脑图、自测和译文保存在网站运行环境。迁移前导出 JSON 备份；更换运行环境时重新配置 AI 密钥。</p><div class="button-row"><button class="button" data-action="navigate" data-view="notes">查看学习笔记</button><button class="button" data-action="backup">导出与备份</button></div></section></div>`
     + (state.setupError?`<p class="notice" role="alert">${esc(state.setupError)}</p>`:'')
     + (setup?`<section class="panel"><div class="section-head"><h2>当前电脑：${esc(setup.platform)} · Python ${esc(setup.python)}</h2></div><p class="metadata">仅检查本机，不安装软件、不自动请求模型。可选项暂未启用时，其他功能仍可使用。</p><div class="setup-checks">${setup.checks.map(c=>`<article><span class="task-badge ${c.ready?'complete':'attention'}">${c.ready?'已就绪':'按需配置'}</span><div><h3>${esc(c.name)}</h3><p>${esc(c.detail)}</p></div></article>`).join('')}</div><p class="notice">${esc(setup.privacy)}</p></section>`:'<p class="metadata" role="status">正在检查本机环境…</p>');
 }
@@ -838,11 +839,11 @@ function insightsPage() {
 async function refreshIntegrations() {state.integrations=await request('/api/integrations/status');return state.integrations;}
 async function aiSettings() {
   const status=await refreshIntegrations();
-  showModal('选择你的 AI','选择模型后保存，新任务会使用你的选择。连接凭据只留在本机。',`
+  showModal('选择你的 AI','网页 API 与本机 Harness 可自行选择；新任务按保存的设置运行。凭据保存在网站后端。',`
     <form>
       <label class="field"><span>整理时使用</span><select name="mode" aria-label="整理时使用">
-        <option value="harness"${status.ai.mode==='harness'?' selected':''}>本机 DeepSeek Harness</option>
-        <option value="deepseek"${status.ai.mode==='deepseek'?' selected':''}>DeepSeek 官方 API</option>
+        <option value="harness"${status.deployment?.mode==='private-server'?' disabled':''}${status.ai.mode==='harness'?' selected':''}>本机 DeepSeek Harness</option>
+        <option value="deepseek"${status.ai.mode==='deepseek'?' selected':''}>DeepSeek 官方 API（网页直连，无需 Harness）</option>
         <option value="compatible"${status.ai.mode==='compatible'?' selected':''}>兼容接口 / 独立本机模型</option>
       </select></label>
       <div data-ai-mode="harness"${status.ai.mode==='harness'?'':' hidden'}>
@@ -851,11 +852,10 @@ async function aiSettings() {
         ${harnessModelFields(status.harness)}
       </div>
       <div data-ai-mode="deepseek"${status.ai.mode==='deepseek'?'':' hidden'}>
-        <label class="field"><span>官方 API 模型</span><input name="model" maxlength="100" value="${esc(status.ai.model)}"></label>
-        <label class="field"><span>DeepSeek API Key</span><input name="apiKey" type="password" autocomplete="new-password" placeholder="${status.ai.hasApiKey?'已保存；留空保留现有密钥':'填写你的 DeepSeek API Key'}"><small>请求发送到 api.deepseek.com，费用由你的 DeepSeek 账户承担。</small></label>
+        ${deepseekFields(status)}
       </div>
       <div data-ai-mode="compatible"${status.ai.mode==='compatible'?'':' hidden'}>
-        <label class="field"><span>兼容接口服务</span><select name="compatibleProvider" aria-label="兼容接口服务">${(status.ai.compatible?.presets || []).map(p=>`<option value="${esc(p.id)}"${p.id===status.ai.compatible.provider?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label>
+        <label class="field"><span>兼容接口服务</span><select name="compatibleProvider" aria-label="兼容接口服务">${(status.ai.compatible?.presets || []).map(p=>`<option value="${esc(p.id)}"${status.deployment?.mode==='private-server' && p.local?' disabled':''}${p.id===status.ai.compatible.provider?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label>
         <label class="field"><span>接口 Base URL</span><input name="compatibleBase" aria-label="接口 Base URL" maxlength="200"><small>云端地址固定为官方接口；本机服务仅允许回环地址。</small></label>
         <label class="field"><span>兼容接口模型 ID</span><input name="compatibleModel" aria-label="兼容接口模型 ID" list="compatible-models" maxlength="200" placeholder="填写服务提供或已在本机安装的模型 ID"><datalist id="compatible-models"></datalist></label>
         <label class="field"><span>兼容接口 API Key</span><input name="compatibleKey" aria-label="兼容接口 API Key" type="password" autocomplete="new-password"><small>密钥按供应商独立保存，本机服务通常可留空。切换服务不会挪用其他服务的密钥。</small></label>
@@ -876,6 +876,7 @@ async function aiSettings() {
     });
   const form=modal.querySelector('form');
   bindHarnessModelFields(form,status.harness.catalog);
+  bindDeepseekFields(form,post);
   function compatibleProfile() {
     const id=form.elements.namedItem('compatibleProvider').value,preset=status.ai.compatible?.presets.find(p=>p.id===id),profile=status.ai.compatible?.profiles[id] || {};
     form.elements.namedItem('compatibleBase').value=profile.baseUrl || preset?.baseUrl || '';

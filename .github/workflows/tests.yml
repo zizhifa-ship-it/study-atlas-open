@@ -24,6 +24,7 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python server.py --help
       - run: python -m unittest discover -s tests -p test_community.py -v
+      - run: python -m unittest discover -s tests -p test_private_api.py -v
       - if: runner.os != 'Windows'
         run: sh -n start.sh
   regression:

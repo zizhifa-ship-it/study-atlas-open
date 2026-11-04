@@ -223,6 +223,10 @@ class Integrations:
     def _save_ai(self, data):
         if data.get("mode") not in {"harness", "deepseek", "compatible"}:
             raise IntegrationError("请选择 AI 接入方式")
+        if data.get('mode') == 'deepseek':
+            model = data.get('model') or 'deepseek-flash'
+            if not isinstance(model, str) or not re.fullmatch(r'[^\x00-\x20\x7f]{1,100}', model):
+                raise IntegrationError('请填写有效的 DeepSeek 模型 ID，或先读取账号模型列表')
         current = self.read("ai")
         current["mode"] = data["mode"]
         current["model"] = str(data.get("model") or "deepseek-flash")[:100]

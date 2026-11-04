@@ -393,7 +393,7 @@ class LibraryStore:
             return copy.deepcopy(clean)
 
 
-def make_handler(store, integrations=None, lan=False, auth=None):
+def make_handler(store, integrations=None, lan=False, auth=None, access_policy=None):
     integrations = integrations or Integrations(store.path.parent / "test-integrations")
     importer = AutoImporter(store, integrations)
     security_token, limiter = secrets.token_hex(32), RateLimiter()
@@ -439,8 +439,9 @@ def make_handler(store, integrations=None, lan=False, auth=None):
                 path = urlsplit(self.path).path
             except ValueError:
                 self.respond(400, {'error':'请求地址不正确'}); return False
-            if not local_boundary(self.headers, self.server.server_port, self.command, path, lan=lan):
-                self.respond(403, {"error": "只接受本机或已授权的局域网页面请求"})
+            allowed = access_policy(self.headers, self.command, path) if access_policy else local_boundary(self.headers, self.server.server_port, self.command, path, lan=lan)
+            if not allowed:
+                self.respond(403, {"error": "请求来源不受支持"})
                 return False
             if self.command in {'POST','PUT'}:
                 session_path = lan and path in {'/api/session', '/api/session/logout'}
@@ -456,7 +457,7 @@ def make_handler(store, integrations=None, lan=False, auth=None):
             return True
 
         def login_page(self):
-            return self.respond(200, (ROOT / 'login.html').read_bytes(), 'text/html; charset=utf-8')
+            return self.respond(200, (ROOT / ('private-login.html' if access_policy else 'login.html')).read_bytes(), 'text/html; charset=utf-8')
 
         def read_json_body(self):
             lengths = self.headers.get_all('Content-Length', [])
@@ -495,13 +496,16 @@ def make_handler(store, integrations=None, lan=False, auth=None):
             elif path == '/api/security':
                 self.respond(200, {'token':security_token})
             elif path == "/api/integrations/status":
-                self.respond(200, dict(integrations.status(), security={'mode':'lan' if lan else 'local','login':lan,'requestToken':True,'originChecks':True,'contentPolicy':True,'rateLimits':True}))
+                self.respond(200, dict(integrations.status(), security={'mode':'private-server' if access_policy else 'lan' if lan else 'local','login':lan,'requestToken':True,'originChecks':True,'contentPolicy':True,'rateLimits':True}))
             elif path == '/api/tasks':
                 from tasks import task_snapshot
                 self.respond(200, task_snapshot(importer))
             elif path == '/api/setup/status':
                 from diagnostics import readiness
-                self.respond(200, readiness(getattr(integrations, 'root', ROOT), integrations))
+                setup = readiness(getattr(integrations, 'root', ROOT), integrations)
+                if access_policy:
+                    setup.update(deployment='private-server', privacy='资料与密钥保存在你的独立服务器。网页 API 不需要 Mac 或 Harness；学习资料发送到你选择的模型服务。')
+                self.respond(200, setup)
             elif path == "/api/youtube/callback":
                 try:
                     integrations.youtube_callback(parse_qs(urlsplit(self.path).query))
@@ -567,6 +571,7 @@ def make_handler(store, integrations=None, lan=False, auth=None):
                           "/harness-models.js": ("harness-models.js", "text/javascript; charset=utf-8"),
                           "/api-client.js": ("api-client.js", "text/javascript; charset=utf-8"),
                           "/file-import.js": ("file-import.js", "text/javascript; charset=utf-8"),
+                          "/deepseek-settings.js": ("deepseek-settings.js", "text/javascript; charset=utf-8"),
                           "/knowledge.js": ("knowledge.js", "text/javascript; charset=utf-8"),
                           "/practice.js": ("practice.js", "text/javascript; charset=utf-8"),
                           "/exports.js": ("exports.js", "text/javascript; charset=utf-8"),
@@ -588,8 +593,10 @@ def make_handler(store, integrations=None, lan=False, auth=None):
                 self.respond(415, {"error": "只接受 JSON 数据"})
                 return
             path = urlsplit(self.path).path
+            if access_policy and path == '/api/session/logout' and not self.authenticated():
+                self.respond(401, {'error': '请先登录'}); return
             if lan and not self.authenticated() and path not in {'/api/session', '/api/session/logout'}:
-                self.respond(401, {'error': '登录已过期，请回到局域网登录页重新登录'})
+                self.respond(401, {'error': '登录已过期，请回到网站登录页重新登录'})
                 return
             try:
                 data = self.read_json_body()
@@ -607,7 +614,7 @@ def make_handler(store, integrations=None, lan=False, auth=None):
                 elif path == '/api/session/logout':
                     if lan and auth:
                         auth.rotate_secret()
-                    self.respond(200, {'authenticated': False}, extra_headers={'Set-Cookie': LanAuth.clear_cookie_header()})
+                    self.respond(200, {'authenticated': False}, extra_headers={'Set-Cookie': auth.clear_cookie_header() if auth else LanAuth.clear_cookie_header()})
                     return
                 elif path == "/api/import":
                     result = importer.submit(string(data.get("url"), "视频链接", 3000), data.get("retry") is True, data.get("detailed", True) is not False)
@@ -620,6 +627,9 @@ def make_handler(store, integrations=None, lan=False, auth=None):
                     result = importer.submit_material(data)
                 elif path == '/api/papers/lookup':
                     result = lookup_paper(string(data.get('query'), 'DOI 或 arXiv 编号', 3000))
+                elif path == '/api/integrations/deepseek/models':
+                    from deepseek_api import list_models
+                    result = list_models(integrations, data.get('apiKey'))
                 elif path == '/api/integrations/compatible/models':
                     result = integrations.compatible_models(data.get('compatible'))
                 elif path == "/api/knowledge/build":
@@ -698,7 +708,7 @@ def make_handler(store, integrations=None, lan=False, auth=None):
             if not self.local_request():
                 return
             if lan and not self.authenticated():
-                self.respond(401, {'error': '登录已过期，请回到局域网登录页重新登录'})
+                self.respond(401, {'error': '登录已过期，请回到网站登录页重新登录'})
                 return
             if urlsplit(self.path).path != "/api/library":
                 self.respond(404, {"error": "接口不存在"})

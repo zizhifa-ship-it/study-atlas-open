@@ -1,0 +1,22 @@
+**
+!*.py
+!*.js
+!*.css
+!*.html
+!*.svg
+!requirements.txt
+!data/
+!data/library.example.json
+!tools/
+!tools/*.py
+!deploy/
+!deploy/Dockerfile
+# Runtime state and secrets never enter the build context.
+.local
+private-state
+.env
+.env.*
+**/.env
+**/.env.*
+data/library.json
+exports
