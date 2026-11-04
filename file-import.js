@@ -17,6 +17,6 @@ export async function readLearningFile(file, post, encode = blob => new Promise(
   if (!/\.(txt|md|markdown|srt|vtt|json|json3)$/i.test(file.name)) throw new Error('请选择 PDF、DOCX、HTML、文字、Markdown 或字幕文件');
   if (file.size > 16 * 1024 * 1024) throw new Error('文字文件最多 16 MB，请按章节拆分');
   const content = await file.text();
-  if (content.length > 800000) throw new Error('正文最多 80 万字符，请按章节拆分');
+  if (content.length > 3000000) throw new Error('正文最多 300 万字符，请按章节拆分');
   return {content, filename: file.name, title: file.name.replace(/\.[^.]+$/, ''), warning: '', readLocally: true};
 }

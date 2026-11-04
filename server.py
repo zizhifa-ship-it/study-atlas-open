@@ -35,7 +35,7 @@ from lan_auth import LanAuth
 from materials import is_material_url
 
 ROOT = Path(__file__).resolve().parent
-MAX_BODY = 4 * 1024 * 1024
+MAX_BODY = 32 * 1024 * 1024
 DOCUMENT_BODY_LIMIT = 64 * 1024 * 1024
 COLORS = {"green", "blue", "purple", "orange"}
 STATUSES = {"todo", "learning", "done"}
@@ -126,7 +126,7 @@ def clean_transcript_info(value, transcript):
             characters = item.get('characters')
             sha256 = item.get('sha256')
             if (not isinstance(filename, str) or not filename.strip() or len(filename.strip()) > 200 or
-                    type(characters) is not int or not 0 <= characters <= 800000 or
+                    type(characters) is not int or not 0 <= characters <= 3000000 or
                     not isinstance(sha256, str) or not re.fullmatch(r'[a-f0-9]{64}', sha256)):
                 continue
             if sha256 in seen:
@@ -318,7 +318,7 @@ def validate_library(payload):
             "tags": list(dict.fromkeys(string(t, "标签", 60) for t in tags)),
             "status": status, "favorite": video.get("favorite", False),
             "summary": string(video.get("summary", ""), "知识总结", 30000, True),
-            "transcript": string(video.get("transcript", ""), "字幕或转录", 800000, True, preserve=True),
+            "transcript": string(video.get("transcript", ""), "字幕或转录", 3000000, True, preserve=True),
             "automation": clean_automation(video.get("automation", {})),
             "knowledge": validate_knowledge(video.get("knowledge")),
             "notes": clean_notes,

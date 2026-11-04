@@ -96,10 +96,10 @@ class SupplementTests(unittest.TestCase):
 
     def test_combined_material_over_limit_does_not_overwrite(self):
         data = self.store.read()
-        data['videos'][0]['transcript'] = 'A' * 799980
+        data['videos'][0]['transcript'] = 'A' * 2999980
         self.store.save(data)
         before = self.store.read()['videos'][0]['transcript']
-        with self.assertRaisesRegex(IntegrationError, '80 万'):
+        with self.assertRaisesRegex(IntegrationError, '300 万'):
             self.importer.submit_supplement({
                 'videoId': 'video', 'filename': 'too-long.md',
                 'content': SUPPLEMENT, 'mode': 'append', 'task': 'save',

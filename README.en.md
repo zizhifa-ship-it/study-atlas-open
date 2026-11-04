@@ -71,9 +71,9 @@ Reproducible bug reports are welcome. Do not attach credentials, personal librar
 
 ### Long videos and PDF import
 
-Transcripts and text materials support up to 800,000 characters without silently dropping the tail. Long sources use bounded paragraph chunks, hierarchical summaries and validated, model-specific caches; completed chunks can be reused after interruption. Local models receive smaller inputs. AI digests can still miss details; check the source.
+Transcripts and text materials support up to 3,000,000 characters without silently dropping the tail. Long sources use bounded paragraph chunks, hierarchical summaries and validated, model-specific caches; completed chunks can be reused after interruption. Local models receive smaller inputs. AI digests can still miss details; check the source.
 
-Import a PDF from onboarding/material import, preview extracted text and page numbers, then save and optionally generate Cornell notes, knowledge modules and mind maps. PDFs can also supplement an existing video under Quality & Sources. Install `python3 -m pip install -r requirements.txt`. Limits: 32 MB, 1,000 pages, 800,000 characters. Unlock password-protected PDFs first; scanned pages require external OCR. Images are not interpreted, and pages with no readable text produce a warning. Parsing runs in a local, time-limited worker; original PDF bytes are not retained. Only extracted text is saved and, when requested, sent to your selected AI provider.
+Import a PDF from onboarding/material import, preview extracted text and page numbers, then save and optionally generate Cornell notes, knowledge modules and mind maps. PDFs can also supplement an existing video under Quality & Sources. Install `python3 -m pip install -r requirements.txt`. Limits: 32 MB, 1,000 pages, 3,000,000 characters. Unlock password-protected PDFs first; scanned pages require external OCR. Images are not interpreted, and pages with no readable text produce a warning. Parsing runs in a local, time-limited worker; original PDF bytes are not retained. Only extracted text is saved and, when requested, sent to your selected AI provider.
 
 ### Independent iPad access and web API mode
 

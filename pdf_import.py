@@ -10,7 +10,7 @@ from pathlib import Path, PurePosixPath
 
 MAX_PDF_BYTES = 32 * 1024 * 1024
 MAX_PAGES = 1000
-MAX_TEXT = 800000
+MAX_TEXT = 3000000
 IMPORT_LOCK = threading.Lock()
 
 
@@ -81,7 +81,7 @@ def extract_pdf(data):
                 textpage = page.get_textpage()
                 # Check before extraction to avoid allocating an unbounded string.
                 if textpage.count_chars() > MAX_TEXT - size:
-                    raise IntegrationError('PDF 正文超过 80 万字符，请按章节拆分')
+                    raise IntegrationError('PDF 正文超过 300 万字符，请按章节拆分')
                 text = textpage.get_text_bounded().replace('\x00', '').strip()
             finally:
                 if textpage is not None: textpage.close()
@@ -92,7 +92,7 @@ def extract_pdf(data):
             part = '[PDF 第 %d 页]\n%s' % (index + 1, text)
             size += len(part) + 2
             if size > MAX_TEXT:
-                raise IntegrationError('PDF 正文超过 80 万字符，请按章节拆分')
+                raise IntegrationError('PDF 正文超过 300 万字符，请按章节拆分')
             parts.append(part)
         if sum(len(p.split('\n', 1)[1]) for p in parts) < 20:
             raise IntegrationError('未读取到足够正文：扫描版 PDF 请先 OCR，或导入可选择文字的 PDF；不会依据文件名编造笔记')

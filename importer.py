@@ -122,8 +122,8 @@ class AutoImporter:
         if not isinstance(filename, str) or not 1 <= len(filename) <= 255:
             raise IntegrationError('文件名不正确')
         raw = data.get('content')
-        if not isinstance(raw, str) or not 20 <= len(raw) <= 800000:
-            raise IntegrationError('请导入 20 至 800000 字符的资料')
+        if not isinstance(raw, str) or not 20 <= len(raw) <= 3000000:
+            raise IntegrationError('请导入 20 至 3000000 字符的资料')
         mode = data.get('mode', 'append')
         if mode not in {'append', 'replace'}:
             raise IntegrationError('补充方式不正确')

@@ -58,7 +58,7 @@ class SecurityTests(unittest.TestCase):
             self.assertEqual(self.request('PUT','/api/library',body,authorized=True)[0],400)
         self.assertEqual(self.store.path.read_bytes(),before)
     def test_chunked_or_oversized_body_rejected_before_read(self):
-        for headers in [{'Transfer-Encoding':'chunked'}, {'Content-Length':str(4*1024*1024+1)}]:
+        for headers in [{'Transfer-Encoding':'chunked'}, {'Content-Length':str(32*1024*1024+1)}]:
             self.assertEqual(self.request('POST','/api/import','{}',headers,True)[0],400)
     def test_security_headers_and_no_permissive_cors(self):
         status,body,headers=self.request('GET','/')

@@ -83,7 +83,7 @@ class LongSourceTests(unittest.TestCase):
         self.assertEqual(parse_transcript(source).splitlines()[-1], 'END_OF_COURSE')
         self.assertTrue(parse_material({'title': 'Full course', 'filename': 'lecture.md', 'content': source})[2].endswith('END_OF_COURSE'))
         with self.assertRaises(IntegrationError):
-            parse_material({'title': 'Too long', 'filename': 'large.md', 'content': 'x' * 800001})
+            parse_material({'title': 'Too long', 'filename': 'large.md', 'content': 'x' * 3000001})
 
     def test_hierarchy_keeps_all_source_and_bounds_each_call(self):
         calls = []
