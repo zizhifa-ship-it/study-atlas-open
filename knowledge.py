@@ -125,8 +125,11 @@ def validate_knowledge(value):
 
 
 def material_for(video):
+    info = video.get('transcriptInfo') or {}
+    digest = info.get('digest')
+    if isinstance(digest, str) and len(digest.strip()) >= 20:
+        return digest, "补充资料本地结构摘录"
     if len(video.get("transcript", "").strip()) >= 20:
-        info = video.get('transcriptInfo') or {}
         return video["transcript"], info.get('source') or "原始字幕"
     notes = [n["text"] for n in video.get("notes", []) if not n["text"].startswith("旧版总结（")]
     material = "\n".join([video.get("summary", "")] + notes).strip()

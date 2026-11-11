@@ -27,7 +27,7 @@ Download the source ZIP and extract it into your own user folder. Python **3.9+*
 
 Open `http://127.0.0.1:8765`. Keep the terminal running. Use `--port 8766` if needed. By default the app binds to loopback only. To use an iPad/phone on the same trusted Wi-Fi, start with `sh start.sh --lan` (or `start.bat --lan`), then open the private IP printed in the terminal and enter the code from `.local/lan-code.txt`. LAN mode is opt-in and requires a session cookie; it is not public hosting. See [LAN and iPad access](docs/局域网与iPad访问.md).
 
-Open **首次使用 / 环境自检** in the sidebar for a read-only setup check. You can import TXT, Markdown or caption files before connecting AI. Plain text and Markdown preserve code indentation and line breaks. PDF / Word files need text extraction first.
+Open **首次使用 / 环境自检** in the sidebar for a read-only setup check. You can import TXT, Markdown, PDF, DOCX, HTML or caption files before connecting AI. Text is extracted locally without a model call; plain text and Markdown preserve code indentation and line breaks. You can also use a local file as an AI study aid for an existing long video: the app extracts a bounded local outline and sends only that outline to the model, keeping the full file and original transcript out of the prompt. You can also append, replace, save only, rebuild modules, or run a full refresh.
 
 ## Choose an AI connection
 
@@ -71,9 +71,9 @@ Reproducible bug reports are welcome. Do not attach credentials, personal librar
 
 ### Long videos and PDF import
 
-Transcripts and text materials support up to 800,000 characters without silently dropping the tail. Long sources use bounded paragraph chunks, hierarchical summaries and validated, model-specific caches; completed chunks can be reused after interruption. Local models receive smaller inputs. AI digests can still miss details; check the source.
+Transcripts and text materials support up to 3,000,000 characters without silently dropping the tail. Long sources use bounded paragraph chunks, hierarchical summaries and validated, model-specific caches; completed chunks can be reused after interruption. Local models receive smaller inputs. AI digests can still miss details; check the source.
 
-Import a PDF from onboarding/material import, preview extracted text and page numbers, then save and optionally generate Cornell notes, knowledge modules and mind maps. PDFs can also supplement an existing video under Quality & Sources. Install `python3 -m pip install -r requirements.txt`. Limits: 8 MB, 300 pages, 800,000 characters. Unlock password-protected PDFs first; scanned pages require external OCR. Images are not interpreted, and pages with no readable text produce a warning. Parsing runs in a local, time-limited worker; original PDF bytes are not retained. Only extracted text is saved and, when requested, sent to your selected AI provider.
+Import a PDF from onboarding/material import, preview extracted text and page numbers, then save and optionally generate Cornell notes, knowledge modules and mind maps. PDFs can also supplement an existing video under Quality & Sources. Install `python3 -m pip install -r requirements.txt`. Limits: 32 MB, 1,000 pages, 3,000,000 characters. Unlock password-protected PDFs first; scanned pages require external OCR. Images are not interpreted, and pages with no readable text produce a warning. Parsing runs in a local, time-limited worker; original PDF bytes are not retained. Only extracted text is saved and, when requested, sent to your selected AI provider.
 
 ### Independent iPad access and web API mode
 

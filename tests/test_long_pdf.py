@@ -55,7 +55,7 @@ class PDFTests(unittest.TestCase):
 
     def test_page_cap_and_mixed_empty_pages_are_explicit(self):
         with patch('pdf_import.MAX_PAGES', 1):
-            with self.assertRaisesRegex(IntegrationError, '300'): extract_pdf(pdf_data())
+            with self.assertRaisesRegex(IntegrationError, '页'): extract_pdf(pdf_data())
         from reportlab.pdfgen.canvas import Canvas
         buffer = io.BytesIO(); canvas = Canvas(buffer)
         canvas.drawString(50, 700, 'Sufficient real content about network routing and addressing.')
@@ -83,7 +83,7 @@ class LongSourceTests(unittest.TestCase):
         self.assertEqual(parse_transcript(source).splitlines()[-1], 'END_OF_COURSE')
         self.assertTrue(parse_material({'title': 'Full course', 'filename': 'lecture.md', 'content': source})[2].endswith('END_OF_COURSE'))
         with self.assertRaises(IntegrationError):
-            parse_material({'title': 'Too long', 'filename': 'large.md', 'content': 'x' * 800001})
+            parse_material({'title': 'Too long', 'filename': 'large.md', 'content': 'x' * 3000001})
 
     def test_hierarchy_keeps_all_source_and_bounds_each_call(self):
         calls = []
