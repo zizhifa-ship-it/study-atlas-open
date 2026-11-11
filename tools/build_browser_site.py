@@ -10,8 +10,8 @@ from pathlib import Path, PurePosixPath
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parent.parent
-FILES = ['index.html', 'app.js', 'ai.js', 'store.js', 'library.js', 'retrieval.js', 'pdf.js', 'browser.css', 'manifest.webmanifest']
-SHARED = ['cornell.js', 'knowledge.js', 'styles.css', 'favicon.svg']
+FILES = ['index.html', 'app.js', 'ai.js', 'store.js', 'library.js', 'jobs.js', 'retrieval.js', 'pdf.js', 'browser.css', 'manifest.webmanifest']
+SHARED = ['memory-cards.js', 'cornell.js', 'knowledge.js', 'styles.css', 'favicon.svg']
 
 
 def build(output):

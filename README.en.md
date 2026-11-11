@@ -84,3 +84,9 @@ Select **DeepSeek official API** in AI settings to check connectivity, load your
 Open [Study Atlas Browser](https://zizhifa-ship-it.github.io/study-atlas-open/) on iPad Safari. Bring your own DeepSeek API key, choose an account model, import PDF/text/transcripts, and create Cornell notes, knowledge modules, mind maps and source-based chat. The static client calls DeepSeek directly; no Python, Harness or personal server is required.
 
 Notes stay in the current browser's IndexedDB; the key is kept in page memory by default and is cleared on reload. Export JSON before clearing browser data. There is no automatic cross-device sync. Video links can be saved, but platform captions may be blocked by browser CORS; supply transcripts or handouts rather than generating content from titles. Desktop and private-server editions remain available. See the [browser guide](docs/浏览器独立版.md).
+
+### Concise reading and saved-task recovery
+
+The browser edition reopens saved notes after reload and merges repeated source imports. Generation and auditing are saved separately; reconnecting continues the unfinished stage. Uncertain network outcomes pause before another paid request. Keys remain in page memory, while notes remain in the current browser.
+
+Memory cards show the core relationship, one example, a caution and questions with hidden answers. Full Cornell notes, formulas and procedures remain available under the full-notes tab. Self-assessment saves local review progress without calling a model. New notes avoid padding and repetition; existing notes are preserved unless the user explicitly confirms a rewrite.

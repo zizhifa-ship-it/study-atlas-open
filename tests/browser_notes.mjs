@@ -16,9 +16,9 @@ try{
  assert.equal(await page.getByRole('tab',{name:/自查/}).count(),0);assert.equal(await page.locator('.import-panel').count(),0);
  await page.getByLabel('选择笔记语言').selectOption('en');await page.getByRole('button',{name:'生成英语笔记',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('.note-language-status').textContent.includes('英语译文'));
- assert((await page.locator('#module-m1').innerText()).includes('DHCP assigns IP addresses.'));
+ await page.getByRole('tab',{name:'完整笔记',exact:true}).click();assert((await page.locator('#module-m1').innerText()).includes('DHCP assigns IP addresses.'));
  await page.getByRole('tab',{name:'知识脑图',exact:true}).click();assert((await page.locator('.mindmap-stage').innerText()).includes('Address allocation'));
- await page.getByRole('tab',{name:'详尽笔记',exact:true}).click();
+ await page.getByRole('tab',{name:'完整笔记',exact:true}).click();
  await page.getByText('对照中文原稿',{exact:true}).click();assert((await page.locator('.original-comparison').innerText()).includes('已有总结应保留'));
  await page.getByLabel('选择笔记语言').selectOption('zh-CN');assert((await page.locator('#module-m1').innerText()).includes('DHCP'));
  await page.getByRole('button',{name:'质量与来源',exact:true}).click();

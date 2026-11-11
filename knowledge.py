@@ -263,7 +263,7 @@ def build_knowledge(store, integrations, vid, progress, prepared=None, review_on
                         "objective": txt(outline.get("objective"), "学习目标", 500),
                         "prerequisites": strings(outline.get("prerequisites", []), "前置知识", 8, 200)}
                 progress("AI 正在写详尽笔记：第 %d/%d 模块 · %s" % (index, len(outlines), meta["title"]))
-                prompt = (RULES + CORNELL_PROMPT + '\n请写好指定模块的详尽学习笔记。返回 {"notes":"800 至 1600 汉字的 Markdown 正文，解释是什么、为什么、怎样运作、操作步骤与适用边界，重要结论标注[S1]",'
+                prompt = (RULES + CORNELL_PROMPT + '\n请写好指定模块的学习笔记，优先帮助理解与回忆，短句表达，同一事实只解释一次。返回 {"notes":"通常 200 至 500 汉字的精练 Markdown：核心要点、原因或联系、一个例子、适用边界。复杂代码、公式和实验可按必要程度增加。不凑字数，不重复定义和小结。重要结论标注[S1]",'
                           '"concepts":[{"name":"脑图概念名称","explanation":"清晰定义"}],"examples":["课程中的具体例子及解释，无例子则空数组"],'
                           '"pitfalls":["容易混淆的地方"],"questions":[{"question":"复习问题","answer":"依据资料的参考答案"}],'
                           '"evidence":["从提供资料中逐字摘录的一至两段原文，保留原语言，不翻译，每段20至250字符"],"cornell":{"cues":["提示问题"],"summary":"中文模块小结[S1]"},"procedure":null}。'

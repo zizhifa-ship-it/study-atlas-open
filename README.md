@@ -234,3 +234,11 @@ B站支持 BV/av 长链接、b23.tv 短链接及常见分享文本。可读取�
 **在线地址：[学习图谱 · 浏览器独立版](https://zizhifa-ship-it.github.io/study-atlas-open/)**。iPad Safari 可直接打开，填写自己的 DeepSeek API Key 并选择模型，整理 PDF、文字、字幕，生成康奈尔笔记、脑图和复习问题，也可围绕笔记对话。无需运行电脑、Python、Harness 或自行购买服务器。
 
 这是纯前端入口，原有电脑版与私有部署版保留。资料保存在当前浏览器 IndexedDB，Key 默认只在当前页面内存；清理网站数据前请导出 JSON。Mac 资料通过自己导出的 JSON 迁移，不自动上传或跨设备同步。仅有视频链接时可收藏；平台字幕跨域受限，需要补充字幕、转录或讲义，浏览器版不运行本地 ASR。详见 [浏览器独立版说明](docs/浏览器独立版.md)。
+
+### 笔记保存与精练阅读 / Reliable, concise notes
+
+同一资料重复导入会打开原记录。刷新后恢复上次阅读位置；生成和自查分开保存，自查失败只补做自查。新资料可先保存，连接 API 后自动继续。请求结果不明时暂停并明确提示，不自动重复付费请求。
+
+默认“重点卡”每个知识点只显示关键联系、一个例子、注意事项和可展开的回忆问题；康奈尔完整记录、公式和实验步骤仍可在“完整笔记”查看。记得 / 再看一次会保存复习进度。新生成内容要求短句、去重、不凑字数；已有笔记保持原文，主动更新前会确认额度。
+
+Repeated imports reopen the saved source. Reload restores the last reading position. Notes and audits persist separately, so a failed audit does not regenerate the notes. Unknown request outcomes pause rather than silently repeating a paid call. Memory cards offer key relationships, one example, cautions and hidden-answer recall questions; full Cornell notes remain available. Existing notes are preserved, and regenerating them requires explicit confirmation.

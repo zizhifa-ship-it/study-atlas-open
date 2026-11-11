@@ -1,3 +1,4 @@
+import {memoryCards,shortText} from './memory-cards.js';
 import {cornellSheet} from './cornell.js';
 // 脑图由已保存的 AI 知识模块派生，无外部脚本或图形服务。
 const esc = (value='') => String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -36,13 +37,14 @@ export function mindmapSVG(knowledge, compact=false) {
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="group" aria-label="${esc(knowledge.title)} 知识脑图">${body}</svg>`;
 }
-export function knowledgePanel(video, tab='details', compact=false, markdown) {
+export function knowledgePanel(video, tab='memory', compact=false, markdown, options={}) {
   const k=video.knowledge,active=['queued','metadata','transcript','ai'].includes(video.automation?.status);
   if(!k) return `<section class="panel knowledge-empty"><h2>AI 知识模块</h2><p>把课程组织成康奈尔笔记、知识脑图和复习问答。</p><button class="button primary" data-action="build-knowledge" data-id="${esc(video.id)}" ${active?'disabled':''}>${active?'正在整理…':'让 AI 构建知识模块'}</button><small>使用当前连接的 AI，完成后自动保存。</small></section>`;
   const pending=k.review.issues.filter(i=>!i.resolved).length;
-  const tabs=[['details','详尽笔记'],['mindmap','知识脑图']];
-  let html=`<section class="panel knowledge-panel"><div class="knowledge-title"><div><span class="small-label">${k.modules.length} 个知识模块</span><h2>${esc(k.title)}</h2><p>${esc(k.overview)}</p></div></div><div class="knowledge-tabs" role="tablist" aria-label="知识模块视图">${tabs.map(([id,label])=>`<button role="tab" aria-selected="${tab===id}" class="${tab===id?'selected':''}" data-action="knowledge-tab" data-tab="${id}" data-id="${esc(video.id)}">${label}</button>`).join('')}</div>`;
-  if(tab==='mindmap'){
+  const tabs=[['memory','重点卡'],['details','完整笔记'],['mindmap','知识脑图']];
+  let html=`<section class="panel knowledge-panel"><div class="knowledge-title"><div><span class="small-label">${k.modules.length} 个知识模块</span><h2>${esc(k.title)}</h2><p>${esc(tab==='memory'?shortText(k.overview,120):k.overview)}</p></div></div><div class="knowledge-tabs" role="tablist" aria-label="知识模块视图">${tabs.map(([id,label])=>`<button role="tab" aria-selected="${tab===id}" class="${tab===id?'selected':''}" data-action="knowledge-tab" data-tab="${id}" data-id="${esc(video.id)}">${label}</button>`).join('')}</div>`;
+  if(tab==='memory'){html+=memoryCards(video,options);
+  }else if(tab==='mindmap'){
     html+=`<div class="mindmap-toolbar"><p>点击模块或概念可跳到详解；横向滚动查看完整脑图。</p><button class="button small" data-action="knowledge-collapse" data-id="${esc(video.id)}">${compact?'展开概念':'收起概念'}</button><button class="button small" data-action="download-mindmap" data-id="${esc(video.id)}">下载脑图 SVG</button></div><div class="mindmap-stage">${mindmapSVG(k,compact)}</div>`;
   }else{
     html+=`<nav class="module-index" aria-label="模块目录">${k.modules.map((m,i)=>`<button data-action="knowledge-module" data-module="${esc(m.id)}">${i+1}. ${esc(m.title)}</button>`).join('')}</nav>`;

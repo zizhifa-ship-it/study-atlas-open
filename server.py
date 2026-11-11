@@ -614,6 +614,7 @@ def make_handler(store, integrations=None, lan=False, auth=None, access_policy=N
                           "/file-import.js": ("file-import.js", "text/javascript; charset=utf-8"),
                           "/deepseek-settings.js": ("deepseek-settings.js", "text/javascript; charset=utf-8"),
                           "/knowledge.js": ("knowledge.js", "text/javascript; charset=utf-8"),
+                          "/memory-cards.js": ("memory-cards.js", "text/javascript; charset=utf-8"),
                           "/practice.js": ("practice.js", "text/javascript; charset=utf-8"),
                           "/exports.js": ("exports.js", "text/javascript; charset=utf-8"),
                           "/cornell.js": ("cornell.js", "text/javascript; charset=utf-8"),
